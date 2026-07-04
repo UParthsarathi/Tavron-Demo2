@@ -1,8 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Plus, Users, Calendar, FileText, CircleCheck, Circle, SquareCheck, ListTodo, UploadCloud, Trash2, Undo2, MessageCircle, Send, Image as ImageIcon, X } from 'lucide-react';
 import { Project, Engineer, Milestone, ProjectDoc, MilestoneStatus, EngineerTask, TaskStatus, TaskComment } from '@/types';
 import { formatTimeAgo, generateId, cn } from '@/lib/utils';
-import { mockEngineers } from '@/data';
 import { Modal } from '@/components/ui/Modal';
 import { CompleteProjectModal } from './CompleteProjectModal';
 import { ProjectDocumentsModal } from './ProjectDocumentsModal';
@@ -138,8 +137,16 @@ export function ProjectDetails({
     setTaskModalOpen(false);
   };
 
+  const [backendEngineers, setBackendEngineers] = useState<Engineer[]>([]);
+  useEffect(() => {
+    fetch('/api/engineers')
+      .then(res => res.json())
+      .then(data => setBackendEngineers(data))
+      .catch(err => console.error("Failed to fetch engineers", err));
+  }, []);
+
   // Filter available engineers to not show ones already in project
-  const availableEngineers = mockEngineers.filter(me => !project.engineers.find(e => e.id === me.id));
+  const availableEngineers = backendEngineers.filter(me => !project.engineers.find(e => e.id === me.id));
 
   // Modal functions
   return (

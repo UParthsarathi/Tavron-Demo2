@@ -20,6 +20,15 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [dmChats, setDmChats] = useState<Record<string, any[]>>({});
+  const [engineers, setEngineers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/engineers')
+      .then(res => res.json())
+      .then(data => setEngineers(data))
+      .catch(console.error);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,8 +55,17 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
     })
   );
 
+  const engineerChats = engineers.map(e => ({
+    id: `eng-${e.id}`,
+    name: e.name,
+    role: e.role,
+    isTask: false,
+    engineer: e
+  }));
+
   const allChats: any[] = [
-    ...taskChats
+    ...taskChats,
+    ...engineerChats
   ];
 
   const filteredChats = allChats.filter(chat => 
@@ -56,7 +74,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
   );
 
   const activeChat = allChats.find(c => c.id === selectedChat);
-  const activeTaskComments = activeChat?.isTask ? (activeChat.originalTask.comments || []) : [];
+  const activeTaskComments = activeChat?.isTask ? (activeChat.originalTask.comments || []) : (dmChats[activeChat?.id || ''] || []);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,6 +100,23 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
         createdAt: new Date().toISOString(),
         imageUrl: attachedImage || undefined
       });
+      setMessageText('');
+      setAttachedImage(null);
+    } else if (activeChat && !activeChat.isTask) {
+      setDmChats(prev => ({
+        ...prev,
+        [activeChat.id]: [
+          ...(prev[activeChat.id] || []),
+          {
+            id: generateId(),
+            authorRole: userRole,
+            authorName: myName,
+            content: messageText.trim(),
+            createdAt: new Date().toISOString(),
+            imageUrl: attachedImage || undefined
+          }
+        ]
+      }));
       setMessageText('');
       setAttachedImage(null);
     }
@@ -175,9 +210,11 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px]">
               <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm mb-6">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Project Discussion Context</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">{activeChat.isTask ? "Project Discussion Context" : "Direct Message Context"}</h4>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  This discussion is tied to the task <strong>{activeChat.name}</strong> in {activeChat.role}.
+                  {activeChat.isTask 
+                    ? <>This discussion is tied to the task <strong>{activeChat.name}</strong> in {activeChat.role}.</> 
+                    : <>This is a direct message with <strong>{activeChat.name}</strong> ({activeChat.role}).</>}
                 </p>
               </div>
 
@@ -278,6 +315,23 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
                             createdAt: new Date().toISOString(),
                             imageUrl: attachedImage || undefined
                           });
+                          setMessageText('');
+                          setAttachedImage(null);
+                        } else if (activeChat && !activeChat.isTask) {
+                          setDmChats(prev => ({
+                            ...prev,
+                            [activeChat.id]: [
+                              ...(prev[activeChat.id] || []),
+                              {
+                                id: generateId(),
+                                authorRole: 'ENGINEER',
+                                authorName: activeChat.engineer ? activeChat.engineer.name : 'Simulated Engineer',
+                                content: messageText.trim(),
+                                createdAt: new Date().toISOString(),
+                                imageUrl: attachedImage || undefined
+                              }
+                            ]
+                          }));
                           setMessageText('');
                           setAttachedImage(null);
                         }
