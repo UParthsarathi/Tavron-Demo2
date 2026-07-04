@@ -1,0 +1,6 @@
+{
+  "name": "Tavron Project Manager",
+  "description": "Project management dashboard for Tavron engineers to track milestones, assign engineers, and manage project documents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

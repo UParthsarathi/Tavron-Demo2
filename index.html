@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tavron Project Manager</title>
+    <script>
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        const msg = args[0] ? args[0].toString() : '';
+        if (msg.includes('Script error') || msg.includes('ResizeObserver')) {
+          return;
+        }
+        originalConsoleError.apply(console, args);
+      };
+      
+      window.onerror = function(message, source, lineno, colno, error) {
+        if (message === 'Script error.' || (message && message.toString().includes('Script error'))) {
+          return true;
+        }
+      };
+      window.addEventListener('error', function(e) {
+        if (e.message === 'Script error.' || e.message === 'Script error' || (e.message && e.message.toString().includes('Script error'))) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        let msg = '';
+        if (e.reason && e.reason.message) msg = e.reason.message;
+        else if (e.reason) msg = e.reason.toString();
+        
+        if (msg === 'Script error.' || msg.includes('Script error')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
