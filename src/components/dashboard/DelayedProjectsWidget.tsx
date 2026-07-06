@@ -11,9 +11,13 @@ interface DelayedProjectsWidgetProps {
 export function DelayedProjectsWidget({ projects }: DelayedProjectsWidgetProps) {
   const delayedProjects = projects.filter(p => {
     if (p.status !== 'ACTIVE') return false;
-    return p.milestones.some(m => {
+    const projectPending = p.milestones
+      .filter(m => m.status === 'PENDING' || m.status === 'IN_PROGRESS')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 2);
+    return projectPending.some(m => {
       const isPastDue = new Date(m.dueDate).getTime() < Date.now();
-      return isPastDue && m.status !== 'COMPLETED';
+      return isPastDue;
     });
   });
 
@@ -41,7 +45,11 @@ export function DelayedProjectsWidget({ projects }: DelayedProjectsWidgetProps) 
       ) : (
         <div className="space-y-4 flex-1 overflow-y-auto pr-2">
           {delayedProjects.map(project => {
-            const delayedMilestones = project.milestones.filter(m => new Date(m.dueDate).getTime() < Date.now() && m.status !== 'COMPLETED');
+            const delayedMilestones = project.milestones
+              .filter(m => m.status === 'PENDING' || m.status === 'IN_PROGRESS')
+              .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+              .slice(0, 2)
+              .filter(m => new Date(m.dueDate).getTime() < Date.now());
             return (
               <div key={project.id} className="p-3 rounded-xl border border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/20">
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">{project.name}</h4>

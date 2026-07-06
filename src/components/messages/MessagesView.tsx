@@ -40,31 +40,53 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
 
   // Collect all tasks to form project discussions
   // Depending on user role, we filter the projects and tasks appropriately
-  const taskChats: any[] = projects.flatMap(p => 
-    p.tasks.map(t => {
-      const assignedEngineer = p.engineers.find(e => e.id === t.engineerId);
-      return {
-        id: `task-${t.id}`,
-        name: t.title,
-        role: `Project: ${p.name}${assignedEngineer ? ` • Assigned to ${assignedEngineer.name}` : ''}`,
-        isTask: true,
-        originalTask: t,
-        project: p,
-        engineer: assignedEngineer
-      };
-    })
-  );
+  const projectEngineerChats: any[] = projects.flatMap(p => {
+    if (userRole === 'MANAGER') {
+      return p.engineers.map(e => ({
+        id: `proj-${p.id}-eng-${e.id}`,
+        name: e.name,
+        role: `Project: ${p.name}`,
+        isTask: false,
+        isProjectContext: true,
+        engineer: e,
+        project: p
+      }));
+    } else {
+      const myEng = p.engineers.find(e => e.email === user?.email);
+      if (!myEng) return [];
+      return [{
+        id: `proj-${p.id}-eng-${myEng.id}`,
+        name: 'Project Manager',
+        role: `Project: ${p.name}`,
+        isTask: false,
+        isProjectContext: true,
+        engineer: null,
+        project: p
+      }];
+    }
+  });
 
-  const engineerChats = engineers.map(e => ({
-    id: `eng-${e.id}`,
-    name: e.name,
-    role: e.role,
-    isTask: false,
-    engineer: e
-  }));
+  const myEngineerRecord = engineers.find(e => e.email === user?.email);
+  const myEngineerId = myEngineerRecord ? myEngineerRecord.id : 'unknown';
+
+  const engineerChats = userRole === 'MANAGER' 
+    ? engineers.map(e => ({
+        id: `eng-${e.id}`,
+        name: e.name,
+        role: e.role,
+        isTask: false,
+        engineer: e
+      }))
+    : [{
+        id: `eng-${myEngineerId}`,
+        name: 'Project Manager',
+        role: 'Manager',
+        isTask: false,
+        engineer: null
+      }];
 
   const allChats: any[] = [
-    ...taskChats,
+    ...projectEngineerChats,
     ...engineerChats
   ];
 
@@ -74,7 +96,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
   );
 
   const activeChat = allChats.find(c => c.id === selectedChat);
-  const activeTaskComments = activeChat?.isTask ? (activeChat.originalTask.comments || []) : (dmChats[activeChat?.id || ''] || []);
+  const activeTaskComments = dmChats[activeChat?.id || ''] || [];
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -87,33 +109,64 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
     }
   };
 
+  useEffect(() => {
+    if (!activeChat) return;
+    const fetchMessages = () => {
+      fetch(`/api/messages/${activeChat.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setDmChats(prev => ({
+              ...prev,
+              [activeChat.id]: data.map((msg: any) => ({
+                id: msg.id,
+                authorRole: msg.sender_role,
+                authorName: msg.sender_name,
+                content: msg.content,
+                createdAt: msg.created_at,
+                imageUrl: msg.image_url
+              }))
+            }));
+          }
+        })
+        .catch(console.error);
+    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 2000);
+    return () => clearInterval(interval);
+  }, [activeChat?.id]);
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() && !attachedImage) return;
 
-    if (activeChat?.isTask && onAddTaskComment) {
-      onAddTaskComment(activeChat.project.id, activeChat.originalTask.id, {
+    if (activeChat) {
+      const newMsg = {
         id: generateId(),
-        authorRole: userRole === 'MANAGER' ? 'MANAGER' : 'ENGINEER',
-        authorName: myName,
+        sender_email: user?.email || '',
+        sender_name: myName,
+        sender_role: userRole,
         content: messageText.trim(),
-        createdAt: new Date().toISOString(),
-        imageUrl: attachedImage || undefined
-      });
-      setMessageText('');
-      setAttachedImage(null);
-    } else if (activeChat && !activeChat.isTask) {
+        created_at: new Date().toISOString(),
+        image_url: attachedImage || undefined
+      };
+      fetch(`/api/messages/${activeChat.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMsg)
+      }).catch(console.error);
+
       setDmChats(prev => ({
         ...prev,
         [activeChat.id]: [
           ...(prev[activeChat.id] || []),
           {
-            id: generateId(),
-            authorRole: userRole,
-            authorName: myName,
-            content: messageText.trim(),
-            createdAt: new Date().toISOString(),
-            imageUrl: attachedImage || undefined
+            id: newMsg.id,
+            authorRole: newMsg.sender_role,
+            authorName: newMsg.sender_name,
+            content: newMsg.content,
+            createdAt: newMsg.created_at,
+            imageUrl: newMsg.image_url
           }
         ]
       }));
@@ -144,7 +197,47 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
         </div>
         
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.map((chat) => (
+          
+          {filteredChats.filter(c => c.isProjectContext).length > 0 && (
+            <div className="px-4 py-3 bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800/50 text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Project Discussions
+            </div>
+          )}
+          {filteredChats.filter(c => c.isProjectContext).map((chat) => (
+            <button 
+              key={chat.id}
+              onClick={() => setSelectedChat(chat.id)}
+              className={cn(
+                "w-full p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800/50 text-left relative",
+                selectedChat === chat.id ? "bg-gray-50 dark:bg-gray-800/80" : ""
+              )}
+            >
+              <div className="relative flex-shrink-0">
+                {chat.engineer?.avatar ? (
+                  <img src={chat.engineer.avatar} alt={chat.name} className="w-10 h-10 rounded-full bg-gray-100 object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-semibold uppercase">
+                    {chat.name.charAt(0)}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-baseline mb-0.5">
+                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm truncate pr-2">{chat.name}</h3>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {chat.role}
+                </p>
+              </div>
+            </button>
+          ))}
+          
+          {filteredChats.filter(c => !c.isProjectContext).length > 0 && (
+            <div className="px-4 py-3 bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800/50 border-t text-xs font-bold text-gray-500 uppercase tracking-wider">
+              General Direct Messages
+            </div>
+          )}
+          {filteredChats.filter(c => !c.isProjectContext).map((chat) => (
             <button 
               key={chat.id}
               onClick={() => setSelectedChat(chat.id)}
@@ -155,7 +248,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             >
               <div className="relative flex-shrink-0">
                 <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400 font-semibold uppercase">
-                  {chat.isTask ? <Hash className="w-5 h-5" /> : chat.name.charAt(0)}
+                  {chat.name.charAt(0)}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
@@ -168,6 +261,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
               </div>
             </button>
           ))}
+
         </div>
       </div>
 
@@ -210,10 +304,10 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px]">
               <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm mb-6">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">{activeChat.isTask ? "Project Discussion Context" : "Direct Message Context"}</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">{activeChat.isProjectContext ? "Project Context" : "Direct Message Context"}</h4>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {activeChat.isTask 
-                    ? <>This discussion is tied to the task <strong>{activeChat.name}</strong> in {activeChat.role}.</> 
+                  {activeChat.isProjectContext 
+                    ? <>This is your 1-on-1 thread with <strong>{activeChat.name}</strong> scoped to the project <strong>{activeChat.project?.name}</strong>.</> 
                     : <>This is a direct message with <strong>{activeChat.name}</strong> ({activeChat.role}).</>}
                 </p>
               </div>
@@ -306,29 +400,33 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
                       onClick={(e) => {
                         e.preventDefault();
                         if (!messageText.trim() && !attachedImage) return;
-                        if (activeChat?.isTask && onAddTaskComment) {
-                          onAddTaskComment(activeChat.project.id, activeChat.originalTask.id, {
+                        if (activeChat) {
+                          const newMsg = {
                             id: generateId(),
-                            authorRole: 'ENGINEER',
-                            authorName: activeChat.engineer ? activeChat.engineer.name : 'Simulated Engineer',
+                            sender_email: activeChat.engineer ? activeChat.engineer.email : 'simulated@engineer.com',
+                            sender_name: activeChat.engineer ? activeChat.engineer.name : 'Simulated Engineer',
+                            sender_role: 'ENGINEER',
                             content: messageText.trim(),
-                            createdAt: new Date().toISOString(),
-                            imageUrl: attachedImage || undefined
-                          });
-                          setMessageText('');
-                          setAttachedImage(null);
-                        } else if (activeChat && !activeChat.isTask) {
+                            created_at: new Date().toISOString(),
+                            image_url: attachedImage || undefined
+                          };
+                          fetch(`/api/messages/${activeChat.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newMsg)
+                          }).catch(console.error);
+
                           setDmChats(prev => ({
                             ...prev,
                             [activeChat.id]: [
                               ...(prev[activeChat.id] || []),
                               {
-                                id: generateId(),
-                                authorRole: 'ENGINEER',
-                                authorName: activeChat.engineer ? activeChat.engineer.name : 'Simulated Engineer',
-                                content: messageText.trim(),
-                                createdAt: new Date().toISOString(),
-                                imageUrl: attachedImage || undefined
+                                id: newMsg.id,
+                                authorRole: newMsg.sender_role,
+                                authorName: newMsg.sender_name,
+                                content: newMsg.content,
+                                createdAt: newMsg.created_at,
+                                imageUrl: newMsg.image_url
                               }
                             ]
                           }));

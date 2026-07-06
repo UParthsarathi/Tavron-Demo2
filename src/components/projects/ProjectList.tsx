@@ -19,10 +19,11 @@ export function ProjectList({ projects, onSelectProject, onNewProject, readOnly 
     const s = searchQuery.toLowerCase();
     return project.name && project.name.toLowerCase().includes(s);
   }).sort((a, b) => {
-    if (a.status === 'COMPLETED' && b.status !== 'COMPLETED') return 1;
-    if (a.status !== 'COMPLETED' && b.status === 'COMPLETED') return -1;
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
+
+  const activeProjects = filteredProjects.filter(p => p.status !== 'COMPLETED');
+  const completedProjects = filteredProjects.filter(p => p.status === 'COMPLETED');
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-8 py-4 sm:py-6 md:py-8">
@@ -53,20 +54,48 @@ export function ProjectList({ projects, onSelectProject, onNewProject, readOnly 
           <p className="text-gray-500 dark:text-gray-400">No projects found matching "{searchQuery}"</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {filteredProjects.map((project, idx) => (
-            <motion.div
-              key={project.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-            >
-              <ProjectCard 
-                project={project} 
-                onClick={() => onSelectProject(project)} 
-              />
-            </motion.div>
-          ))}
+        <div className="flex flex-col gap-8 sm:gap-12">
+          {activeProjects.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Active Projects</h3>
+              <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+                {activeProjects.map((project, idx) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                  >
+                    <ProjectCard 
+                      project={project} 
+                      onClick={() => onSelectProject(project)} 
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedProjects.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Completed Projects</h3>
+              <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6 opacity-75 hover:opacity-100 transition-opacity">
+                {completedProjects.map((project, idx) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                  >
+                    <ProjectCard 
+                      project={project} 
+                      onClick={() => onSelectProject(project)} 
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

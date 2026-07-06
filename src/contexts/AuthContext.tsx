@@ -1,16 +1,18 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 
+// We'll mock the Supabase Auth entirely for now to allow local testing
 interface AuthContextType {
   session: Session | null;
   user: User | null;
+  signInMock: (email: string) => void;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
+  signInMock: () => {},
   signOut: async () => {},
 });
 
@@ -20,22 +22,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    // Check if we have a mocked user in local storage
+    const storedUser = localStorage.getItem('mock_user_email');
+    if (storedUser) {
+      const mockUser = {
+        id: 'mock-id',
+        email: storedUser,
+        app_metadata: {},
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString()
+      } as User;
+      setUser(mockUser);
+      setSession({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'bearer',
+        user: mockUser
+      });
+    }
+    setLoading(false);
   }, []);
 
+  const signInMock = (email: string) => {
+    localStorage.setItem('mock_user_email', email);
+    const mockUser = {
+      id: 'mock-id',
+      email,
+      app_metadata: {},
+      user_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString()
+    } as User;
+    setUser(mockUser);
+    setSession({
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh',
+      expires_in: 3600,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'bearer',
+      user: mockUser
+    });
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('mock_user_email');
+    setUser(null);
+    setSession(null);
   };
 
   if (loading) {
@@ -47,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, signOut }}>
+    <AuthContext.Provider value={{ session, user, signInMock, signOut }}>
       {children}
     </AuthContext.Provider>
   );

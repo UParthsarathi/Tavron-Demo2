@@ -47,7 +47,21 @@ export interface EngineerTask {
   createdAt: string;
 }
 
+
+export interface DailyLog {
+  id: string;
+  projectId: string;
+  engineerId: string;
+  engineerName: string;
+  tasksCompleted: string;
+  blockers?: string;
+  photoUrl: string;
+  location?: { lat: number; lng: number };
+  createdAt: string;
+}
+
 export interface Project {
+  dailyLogs?: DailyLog[];
   id: string;
   name: string;
   status: ProjectStatus;

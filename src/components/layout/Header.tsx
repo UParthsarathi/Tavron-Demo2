@@ -1,18 +1,19 @@
-import { Hexagon, Moon, Sun, LayoutDashboard, ListTodo, Zap, MessageSquare } from 'lucide-react';
+import { Hexagon, Moon, Sun, LayoutDashboard, ListTodo, Zap, MessageSquare, ClipboardList } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { determineUserRole } from '@/types/roles';
 
 export interface HeaderProps {
-  currentView?: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer';
-  onViewChange?: (view: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer') => void;
+  currentView?: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'daily_log';
+  onViewChange?: (view: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'daily_log') => void;
 }
 
 export function Header({ currentView = 'projects', onViewChange }: HeaderProps) {
   const { user } = useAuth();
   const userRole = determineUserRole(user?.email);
   const username = user?.email?.split('@')[0] || 'User';
+
   
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -64,8 +65,7 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
               Projects
             </button>
             
-            {userRole === 'MANAGER' && (
-              <button
+            <button
                 onClick={() => onViewChange('dashboard')}
                 className={cn(
                   "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
@@ -77,7 +77,6 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
                 <LayoutDashboard className="w-4 h-4" />
                 Dashboard
               </button>
-            )}
             
             {userRole === 'MANAGER' && (
               <button
@@ -91,6 +90,21 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
               >
                 <Zap className="w-4 h-4" />
                 Quick Actions
+              </button>
+            )}
+
+            {userRole === 'ENGINEER' && (
+              <button
+                onClick={() => onViewChange('daily_log')}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                  currentView === 'daily_log' 
+                    ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm" 
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                )}
+              >
+                <ClipboardList className="w-4 h-4" />
+                Daily Log
               </button>
             )}
 

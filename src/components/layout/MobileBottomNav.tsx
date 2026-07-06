@@ -1,11 +1,11 @@
-import { LayoutDashboard, ListTodo, Zap, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Zap, MessageSquare, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { determineUserRole } from '@/types/roles';
 
 export interface MobileBottomNavProps {
-  currentView?: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer';
-  onViewChange?: (view: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer') => void;
+  currentView?: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'daily_log';
+  onViewChange?: (view: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'daily_log') => void;
 }
 
 export function MobileBottomNav({ currentView = 'projects', onViewChange }: MobileBottomNavProps) {
@@ -35,8 +35,7 @@ export function MobileBottomNav({ currentView = 'projects', onViewChange }: Mobi
           <span className="text-[10px] font-medium">Projects</span>
         </button>
 
-        {userRole === 'MANAGER' && (
-          <button
+        <button
             onClick={() => onViewChange('dashboard')}
             className={cn(
               "flex flex-col items-center justify-center gap-0.5 min-w-[4rem] transition-colors",
@@ -53,8 +52,26 @@ export function MobileBottomNav({ currentView = 'projects', onViewChange }: Mobi
             </div>
             <span className="text-[10px] font-medium">Dashboard</span>
           </button>
-        )}
 
+        {userRole === 'ENGINEER' && (
+          <button
+            onClick={() => onViewChange('daily_log')}
+            className={cn(
+              "flex flex-col items-center justify-center gap-0.5 min-w-[4rem] transition-colors",
+              currentView === 'daily_log' 
+                ? "text-gray-900 dark:text-white" 
+                : "text-gray-500 hover:text-gray-900 dark:hover:text-white"
+            )}
+          >
+            <div className={cn(
+              "p-1 rounded-full transition-colors",
+              currentView === 'daily_log' ? "bg-gray-100 dark:bg-gray-800" : "bg-transparent"
+            )}>
+              <ClipboardList className="w-4 h-4" />
+            </div>
+            <span className="text-[10px] font-medium">Log</span>
+          </button>
+        )}
         <button
           onClick={() => onViewChange('messages')}
           className={cn(

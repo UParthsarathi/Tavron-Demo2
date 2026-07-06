@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, Engineer } from '@/types';
 import { motion } from 'framer-motion';
 import { Users } from 'lucide-react';
@@ -7,27 +7,70 @@ interface WorkloadWidgetProps {
   projects: Project[];
 }
 
+interface EngineerWorkload {
+  engineer: Engineer;
+  activeProjects: number;
+  projectTasks: number;
+  delegatedTasks: number;
+  totalLoad: number;
+}
+
 export function WorkloadWidget({ projects }: WorkloadWidgetProps) {
-  const engineerLoad = new Map<string, { engineer: Engineer, activeProjects: number, tasks: number }>();
+  const [engineers, setEngineers] = useState<Engineer[]>([]);
+  const [delegatedCounts, setDelegatedCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
 
-  projects.forEach(p => {
-    if (p.status !== 'ACTIVE') return;
-    
-    p.engineers.forEach(e => {
-      if (!engineerLoad.has(e.id)) {
-        engineerLoad.set(e.id, { engineer: e, activeProjects: 0, tasks: 0 });
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/engineers').then(res => res.json()),
+      fetch('/api/delegated-tasks-count').then(res => res.json())
+    ]).then(([engineersData, delegatedData]) => {
+      setEngineers(engineersData);
+      
+      const counts: Record<string, number> = {};
+      delegatedData.forEach((row: any) => {
+        // chat_id is like 'eng-1'
+        const engId = row.chat_id.replace('eng-', 'eng-');
+        counts[engId] = row.count;
+      });
+      setDelegatedCounts(counts);
+      setLoading(false);
+    }).catch(err => {
+      console.error(err);
+      setLoading(false);
+    });
+  }, []);
+
+  const loadList: EngineerWorkload[] = engineers.map(engineer => {
+    let activeProjects = 0;
+    let projectTasks = 0;
+
+    projects.forEach(p => {
+      if (p.status !== 'ACTIVE') return;
+      
+      if (p.engineers.some(e => e.id === engineer.id)) {
+        activeProjects += 1;
       }
-      engineerLoad.get(e.id)!.activeProjects += 1;
+      
+      p.tasks?.forEach(t => {
+        if (t.status !== 'DONE' && t.engineerId === engineer.id) {
+          projectTasks += 1;
+        }
+      });
     });
 
-    p.tasks.forEach(t => {
-      if (t.status !== 'DONE' && engineerLoad.has(t.engineerId)) {
-        engineerLoad.get(t.engineerId)!.tasks += 1;
-      }
-    });
-  });
+    const delegatedTasks = delegatedCounts[engineer.id] || 0;
+    const totalTasks = projectTasks + delegatedTasks;
+    const totalLoad = totalTasks + activeProjects;
 
-  const loadList = Array.from(engineerLoad.values()).sort((a, b) => b.tasks - a.tasks);
+    return {
+      engineer,
+      activeProjects,
+      projectTasks,
+      delegatedTasks,
+      totalLoad
+    };
+  }).sort((a, b) => a.totalLoad - b.totalLoad);
 
   return (
     <motion.div
@@ -39,36 +82,45 @@ export function WorkloadWidget({ projects }: WorkloadWidgetProps) {
         <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
           <Users className="w-5 h-5" />
         </div>
-        <h3 className="font-semibold text-gray-900 dark:text-white">Workload Distribution</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white">Team Workload</h3>
       </div>
       
-      {loadList.length === 0 ? (
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center py-6">
+          <span className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></span>
+        </div>
+      ) : loadList.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
-          <p className="text-sm text-gray-500">No active engineers.</p>
+          <p className="text-sm text-gray-500">No engineers available.</p>
         </div>
       ) : (
-        <div className="space-y-4 flex-1 overflow-y-auto pr-2">
-          {loadList.map(({ engineer, activeProjects, tasks }) => (
-            <div key={engineer.id} className="flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                {engineer.avatar ? (
-                  <img src={engineer.avatar} alt={engineer.name} className="w-8 h-8 rounded-full bg-gray-100" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300">
-                    {engineer.name.charAt(0)}
+        <div className="space-y-5 flex-1 overflow-y-auto pr-2">
+          {loadList.map(({ engineer, activeProjects, projectTasks, delegatedTasks, totalLoad }) => {
+            const totalTasks = projectTasks + delegatedTasks;
+            return (
+              <div key={engineer.id} className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    {engineer.avatar ? (
+                      <img src={engineer.avatar} alt={engineer.name} className="w-8 h-8 rounded-full bg-gray-100" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300">
+                        {engineer.name.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{engineer.name}</h4>
+                      <p className="text-xs text-gray-500">{engineer.role}</p>
+                    </div>
                   </div>
-                )}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{engineer.name}</h4>
-                  <p className="text-xs text-gray-500">{engineer.role}</p>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{activeProjects} <span className="text-xs text-gray-500 font-normal">proj</span></p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{totalTasks} <span className="text-xs text-gray-500 font-normal">tasks</span></p>
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{tasks} <span className="text-xs text-gray-500 font-normal">tasks</span></p>
-                <p className="text-xs text-gray-500">{activeProjects} projects</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </motion.div>

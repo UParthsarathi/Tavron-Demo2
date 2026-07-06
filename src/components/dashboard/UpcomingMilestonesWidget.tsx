@@ -13,11 +13,16 @@ export function UpcomingMilestonesWidget({ projects }: UpcomingMilestonesWidgetP
   
   projects.forEach(p => {
     if (p.status !== 'ACTIVE') return;
-    p.milestones.forEach(m => {
+    const projectPending = p.milestones
+      .filter(m => m.status === 'PENDING' || m.status === 'IN_PROGRESS')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 2);
+      
+    projectPending.forEach(m => {
       const dueDate = new Date(m.dueDate);
       const now = new Date();
       // Look ahead up to 30 days, ignore past due
-      if (m.status !== 'COMPLETED' && isAfter(dueDate, now) && isBefore(dueDate, addDays(now, 30))) {
+      if (isAfter(dueDate, now) && isBefore(dueDate, addDays(now, 30))) {
         upcoming.push({ project: p, milestone: m });
       }
     });
@@ -44,7 +49,7 @@ export function UpcomingMilestonesWidget({ projects }: UpcomingMilestonesWidgetP
         </div>
       ) : (
         <div className="space-y-4 flex-1 overflow-y-auto pr-2">
-          {upcoming.slice(0, 5).map(({ project, milestone }) => (
+          {upcoming.map(({ project, milestone }) => (
             <div key={milestone.id} className="flex justify-between items-start pb-3 border-b border-gray-100 dark:border-gray-800 last:border-0 last:pb-0">
               <div>
                 <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">{milestone.title}</h4>

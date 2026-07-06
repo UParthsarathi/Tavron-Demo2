@@ -8,6 +8,8 @@ import { ProjectDetails } from '@/components/projects/ProjectDetails';
 import { useProjects } from '@/hooks/useProjects';
 import { useAuth } from '@/contexts/AuthContext';
 
+import { EngineerDashboard } from '@/components/dashboard/EngineerDashboard';
+import { DailyLogView } from '@/components/daily-log/DailyLogView';
 export function EngineerLayout() {
   const { 
     projects, 
@@ -15,7 +17,7 @@ export function EngineerLayout() {
   } = useProjects();
   const { user } = useAuth();
   
-  const [currentView, setCurrentView] = useState<'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer'>('projects');
+  const [currentView, setCurrentView] = useState<'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'daily_log'>('projects');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
@@ -27,7 +29,7 @@ export function EngineerLayout() {
   );
 
   const selectedProject = selectedProjectId 
-    ? projects.find(p => p.id === selectedProjectId) 
+    ? assignedProjects.find(p => p.id === selectedProjectId) 
     : null;
 
   return (
@@ -54,6 +56,10 @@ export function EngineerLayout() {
           />
         ) : currentView === 'account' ? (
           <AccountView />
+        ) : currentView === 'dashboard' ? (
+          <EngineerDashboard projects={assignedProjects} />
+        ) : currentView === 'daily_log' ? (
+          <DailyLogView />
         ) : selectedProject ? (
           <ProjectDetails 
             project={selectedProject} 
@@ -71,8 +77,8 @@ export function EngineerLayout() {
             onUpdateTaskStatus={() => {}}
             onDeleteTask={() => {}}
             onAddTaskComment={addTaskComment}
-            onDiscussTask={(taskId) => {
-              setSelectedChatId(`task-${taskId}`);
+            onDiscussTask={(task) => {
+              setSelectedChatId(`proj-${selectedProjectId}-eng-${task.engineerId}`);
               setCurrentView('messages');
             }}
             readOnly={true}

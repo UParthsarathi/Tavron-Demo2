@@ -7,6 +7,7 @@ import { CreateProjectModal } from '@/components/projects/CreateProjectModal';
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { QuickActionsView } from '@/components/actions/QuickActionsView';
 import { AddEngineerView } from '@/components/actions/AddEngineerView';
+import { DelegateWorkView } from '@/components/actions/DelegateWorkView';
 import { AccountView } from '@/components/account/AccountView';
 import { MessagesView } from '@/components/messages/MessagesView';
 import { useProjects } from '@/hooks/useProjects';
@@ -36,7 +37,7 @@ export function ManagerLayout() {
   
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer'>('projects');
+  const [currentView, setCurrentView] = useState<'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer' | 'delegate_work'>('projects');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
   const selectedProject = selectedProjectId 
@@ -68,13 +69,17 @@ export function ManagerLayout() {
           />
         ) : currentView === 'add_engineer' ? (
           <AddEngineerView onBack={() => setCurrentView('actions')} />
+        ) : currentView === 'delegate_work' ? (
+          <DelegateWorkView onBack={() => setCurrentView('actions')} />
         ) : currentView === 'account' ? (
           <AccountView />
         ) : currentView === 'actions' ? (
           <QuickActionsView onActionClick={(action) => {
-            if (action === 'Direct Messages' || action === 'Delegate Work') {
+            if (action === 'Direct Messages') {
               setCurrentView('messages');
               setSelectedChatId(null);
+            } else if (action === 'Delegate Work') {
+              setCurrentView('delegate_work');
             } else if (action === 'Add Engineer') {
               setCurrentView('add_engineer');
             }
@@ -103,8 +108,8 @@ export function ManagerLayout() {
             onUpdateTaskStatus={updateTaskStatus}
             onDeleteTask={deleteTask}
             onAddTaskComment={addTaskComment}
-            onDiscussTask={(taskId) => {
-              setSelectedChatId(`task-${taskId}`);
+            onDiscussTask={(task) => {
+              setSelectedChatId(`proj-${selectedProjectId}-eng-${task.engineerId}`);
               setCurrentView('messages');
             }}
           />
