@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserPlus, Mail, Shield, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { cn } from '@/lib/utils';
+import { profiles as profilesApi } from '@/lib/api';
 
 export function AddEngineerView({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('');
@@ -9,26 +9,29 @@ export function AddEngineerView({ onBack }: { onBack: () => void }) {
   const [customRole, setCustomRole] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     if (role === 'Custom' && !customRole) return;
-    
+
     setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setError(null);
+    try {
+      // Sends a real Supabase auth invitation via the invite-engineer edge
+      // function; the invitee's profile is created (role ENGINEER) when they
+      // accept the email link and set a password.
+      await profilesApi.inviteEngineer({
+        email,
+        discipline: role === 'Custom' ? customRole : role,
+      });
       setIsSuccess(true);
-      
-      // Reset after 3 seconds
-      setTimeout(() => {
-        setIsSuccess(false);
-        setEmail('');
-        setRole('Mechanical Engineer');
-        setCustomRole('');
-      }, 3000);
-    }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send invitation');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -66,8 +69,13 @@ export function AddEngineerView({ onBack }: { onBack: () => void }) {
               We've sent an email to <span className="font-semibold text-gray-700 dark:text-gray-300">{email}</span>. 
               Once they click the link, they'll be prompted to create their account and log in as an engineer.
             </p>
-            <button 
-              onClick={() => setIsSuccess(false)}
+            <button
+              onClick={() => {
+                setIsSuccess(false);
+                setEmail('');
+                setRole('Mechanical Engineer');
+                setCustomRole('');
+              }}
               className="mt-8 px-6 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Invite Another Engineer
@@ -76,6 +84,11 @@ export function AddEngineerView({ onBack }: { onBack: () => void }) {
         ) : (
           <form onSubmit={handleSubmit} className="p-6 sm:p-8">
             <div className="space-y-6">
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm rounded-xl">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Email Address

@@ -1,25 +1,27 @@
-import React from 'react';
-import { AuthScreen } from '@/components/auth/AuthScreen';
+import React, { useState } from 'react';
+import { AuthScreen, SetPasswordScreen, useInviteFlow } from '@/components/auth/AuthScreen';
 import { useAuth } from '@/contexts/AuthContext';
-import { determineUserRole } from '@/types/roles';
 import { ManagerLayout } from '@/components/layout/ManagerLayout';
 import { EngineerLayout } from '@/components/layout/EngineerLayout';
 
 export default function App() {
-  const { session, user } = useAuth();
-  
+  const { session, role } = useAuth();
+  const arrivedViaInvite = useInviteFlow();
+  const [passwordSet, setPasswordSet] = useState(false);
+
   if (!session) {
     return <AuthScreen />;
   }
 
-  const role = determineUserRole(user?.email);
+  // Invited users land here signed-in but without a password yet.
+  if (arrivedViaInvite && !passwordSet) {
+    return <SetPasswordScreen onDone={() => setPasswordSet(true)} />;
+  }
 
+  // Role comes from the user's DB profile (profiles.role), set at invite time.
   if (role === 'ENGINEER') {
     return <EngineerLayout />;
   }
 
-  // Default to Manager Layout for PM/Admin and any unknown roles 
-  // (to maintain existing functionality if email doesn't strictly match)
   return <ManagerLayout />;
 }
-

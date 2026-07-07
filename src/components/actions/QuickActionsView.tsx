@@ -16,8 +16,8 @@ const actions = [
     color: 'bg-gray-100 dark:bg-gray-800',
   },
   {
-    title: 'Direct Messages',
-    description: 'To-and-fro communication with engineers',
+    title: 'Task Discussions',
+    description: 'Follow every task discussion thread in one place',
     icon: <MessageSquare className="w-6 h-6 text-gray-900 dark:text-white" />,
     color: 'bg-gray-100 dark:bg-gray-800',
   }

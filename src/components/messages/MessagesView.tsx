@@ -1,25 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Send, ArrowLeft, MoreVertical, Phone, Video, MessageSquare, Hash, Image as ImageIcon, X } from 'lucide-react';
-import { cn, generateId } from '@/lib/utils';
-import { Project, EngineerTask, TaskComment } from '@/types';
+import { Search, Send, ArrowLeft, MessageSquare, Hash, Image as ImageIcon, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { EngineerTask, Project } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { determineUserRole } from '@/types/roles';
 
 export interface MessagesViewProps {
   projects?: Project[];
+  standaloneTasks?: EngineerTask[];
   initialChatId?: string | null;
-  onAddTaskComment?: (projectId: string, taskId: string, comment: TaskComment) => void;
+  onAddTaskComment?: (taskId: string, data: { content: string; imageFile?: File | null }) => void;
 }
 
-export function MessagesView({ projects = [], initialChatId = null, onAddTaskComment }: MessagesViewProps) {
-  const { user } = useAuth();
-  const userRole = determineUserRole(user?.email);
-  const myName = user?.email?.split('@')[0] || 'Me';
+interface TaskChat {
+  id: string;
+  name: string;
+  role: string;
+  task: EngineerTask;
+}
+
+/**
+ * Task-scoped discussions (one thread per task, project or standalone).
+ * There are deliberately no person-to-person DMs — see DECISIONS.md.
+ */
+export function MessagesView({ projects = [], standaloneTasks = [], initialChatId = null, onAddTaskComment }: MessagesViewProps) {
+  const { profile } = useAuth();
 
   const [selectedChat, setSelectedChat] = useState<string | null>(initialChatId);
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [attachedImage, setAttachedImage] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,58 +38,49 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
     }
   }, [initialChatId]);
 
-  // Collect all tasks to form project discussions
-  // Depending on user role, we filter the projects and tasks appropriately
-  const taskChats: any[] = projects.flatMap(p => 
+  // One chat per task: project tasks first, then standalone tasks.
+  const projectChats: TaskChat[] = projects.flatMap(p =>
     p.tasks.map(t => {
       const assignedEngineer = p.engineers.find(e => e.id === t.engineerId);
       return {
         id: `task-${t.id}`,
         name: t.title,
         role: `Project: ${p.name}${assignedEngineer ? ` • Assigned to ${assignedEngineer.name}` : ''}`,
-        isTask: true,
-        originalTask: t,
-        project: p,
-        engineer: assignedEngineer
+        task: t,
       };
     })
   );
 
-  const allChats: any[] = [
-    ...taskChats
-  ];
+  const standaloneChats: TaskChat[] = standaloneTasks.map(t => ({
+    id: `task-${t.id}`,
+    name: t.title,
+    role: 'Standalone task',
+    task: t,
+  }));
 
-  const filteredChats = allChats.filter(chat => 
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const allChats: TaskChat[] = [...projectChats, ...standaloneChats];
+
+  const filteredChats = allChats.filter(chat =>
+    chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     chat.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const activeChat = allChats.find(c => c.id === selectedChat);
-  const activeTaskComments = activeChat?.isTask ? (activeChat.originalTask.comments || []) : [];
+  const activeTaskComments = activeChat?.task.comments ?? [];
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAttachedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) setAttachedImage(file);
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() && !attachedImage) return;
 
-    if (activeChat?.isTask && onAddTaskComment) {
-      onAddTaskComment(activeChat.project.id, activeChat.originalTask.id, {
-        id: generateId(),
-        authorRole: userRole === 'MANAGER' ? 'MANAGER' : 'ENGINEER',
-        authorName: myName,
+    if (activeChat && onAddTaskComment) {
+      onAddTaskComment(activeChat.task.id, {
         content: messageText.trim(),
-        createdAt: new Date().toISOString(),
-        imageUrl: attachedImage || undefined
+        imageFile: attachedImage,
       });
       setMessageText('');
       setAttachedImage(null);
@@ -89,7 +89,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
 
   return (
     <div className="flex h-[calc(100vh-64px)] sm:h-[calc(100vh-140px)] bg-transparent">
-      {/* Sidebar - Users / Discussions List */}
+      {/* Sidebar - Discussions List */}
       <div className={cn(
         "w-full sm:w-80 md:w-96 border-r border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-[#0f0f11]/50 backdrop-blur-xl flex flex-col transition-transform duration-300",
         selectedChat ? "hidden sm:flex" : "flex"
@@ -98,7 +98,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Messages</h2>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input 
+            <input
               type="text"
               placeholder="Search discussions..."
               className="w-full bg-gray-100 dark:bg-gray-800/50 border-none rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900 dark:focus:ring-white transition-all shadow-sm"
@@ -107,10 +107,15 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             />
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto">
+          {filteredChats.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8 px-4">
+              Task discussions appear here once tasks are created.
+            </p>
+          )}
           {filteredChats.map((chat) => (
-            <button 
+            <button
               key={chat.id}
               onClick={() => setSelectedChat(chat.id)}
               className={cn(
@@ -120,7 +125,7 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             >
               <div className="relative flex-shrink-0">
                 <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400 font-semibold uppercase">
-                  {chat.isTask ? <Hash className="w-5 h-5" /> : chat.name.charAt(0)}
+                  <Hash className="w-5 h-5" />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
@@ -154,14 +159,14 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             {/* Chat Header */}
             <div className="h-16 border-b border-gray-200/60 dark:border-gray-800/60 bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-10 shadow-sm">
               <div className="flex items-center gap-3 min-w-0">
-                <button 
+                <button
                   onClick={() => setSelectedChat(null)}
                   className="sm:hidden p-2 -ml-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
                 <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400 font-semibold uppercase flex-shrink-0">
-                  {activeChat.isTask ? <Hash className="w-4 h-4" /> : activeChat.name.charAt(0)}
+                  <Hash className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-semibold text-gray-900 dark:text-white truncate">{activeChat.name}</h3>
@@ -175,9 +180,9 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px]">
               <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm mb-6">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Project Discussion Context</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Task Discussion Context</h4>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  This discussion is tied to the task <strong>{activeChat.name}</strong> in {activeChat.role}.
+                  This discussion is tied to the task <strong>{activeChat.name}</strong> ({activeChat.role}).
                 </p>
               </div>
 
@@ -185,13 +190,13 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
                 <div className="text-center text-sm font-medium text-gray-500 my-8">No messages yet. Start the discussion.</div>
               ) : (
                 activeTaskComments.map(msg => {
-                  const isMe = msg.authorRole === userRole;
+                  const isMe = msg.authorId === profile?.id;
                   return (
                     <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                       <div className={cn(
                         "max-w-[80%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm relative group flex flex-col",
-                        isMe 
-                          ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-tr-none" 
+                        isMe
+                          ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-tr-none"
                           : "bg-white dark:bg-[#18181b] text-gray-900 dark:text-white border border-gray-100 dark:border-gray-800 rounded-tl-none"
                       )}>
                         <span className="text-[10px] uppercase font-bold tracking-wider mb-1 opacity-70">
@@ -218,8 +223,8 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
             <div className="p-4 bg-white dark:bg-[#0f0f11] border-t border-gray-200 dark:border-gray-800">
               {attachedImage && (
                 <div className="mb-3 relative inline-block">
-                  <img src={attachedImage} alt="Preview" className="h-20 w-auto rounded-lg object-cover shadow-sm border border-gray-200 dark:border-gray-700" />
-                  <button 
+                  <img src={URL.createObjectURL(attachedImage)} alt="Preview" className="h-20 w-auto rounded-lg object-cover shadow-sm border border-gray-200 dark:border-gray-700" />
+                  <button
                     onClick={() => setAttachedImage(null)}
                     className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600 transition-colors"
                   >
@@ -237,21 +242,21 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
                   >
                     <ImageIcon className="w-5 h-5" />
                   </button>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
                     ref={fileInputRef}
                     onChange={handleImageUpload}
                   />
-                  <input 
+                  <input
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
                     placeholder="Discuss this task..."
                     className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-full pl-5 pr-14 py-3 sm:py-3.5 text-[15px] text-gray-900 dark:text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 dark:focus:ring-white/20 transition-all shadow-sm"
                   />
-                  <button 
+                  <button
                     type="submit"
                     disabled={!messageText.trim() && !attachedImage}
                     className="absolute right-1.5 p-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 transition-colors shadow-sm"
@@ -259,36 +264,6 @@ export function MessagesView({ projects = [], initialChatId = null, onAddTaskCom
                     <Send className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" />
                   </button>
                 </div>
-                
-                {/* Manager testing - Simulate engineer reply */}
-                {userRole === 'MANAGER' && (
-                  <div className="flex justify-end mt-1">
-                    <button
-                      type="button"
-                      disabled={(!messageText.trim() && !attachedImage)}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (!messageText.trim() && !attachedImage) return;
-                        if (activeChat?.isTask && onAddTaskComment) {
-                          onAddTaskComment(activeChat.project.id, activeChat.originalTask.id, {
-                            id: generateId(),
-                            authorRole: 'ENGINEER',
-                            authorName: activeChat.engineer ? activeChat.engineer.name : 'Simulated Engineer',
-                            content: messageText.trim(),
-                            createdAt: new Date().toISOString(),
-                            imageUrl: attachedImage || undefined
-                          });
-                          setMessageText('');
-                          setAttachedImage(null);
-                        }
-                      }}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-50"
-                      title="Simulate Engineer Reply"
-                    >
-                      Engineer Reply
-                    </button>
-                  </div>
-                )}
               </form>
             </div>
           </>

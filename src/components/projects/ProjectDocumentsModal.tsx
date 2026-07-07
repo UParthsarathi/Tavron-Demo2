@@ -1,43 +1,41 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { Project, ProjectDoc } from '@/types';
+import { Project } from '@/types';
 import { FileText, Plus, Trash2, Link as LinkIcon, Upload } from 'lucide-react';
 import { cn, formatTimeAgo } from '@/lib/utils';
+import type { NewDocumentInput } from '@/hooks/useProjects';
 
 interface ProjectDocumentsModalProps {
   project: Project;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateProject: (id: string, updates: Partial<Project>) => void;
+  onAddDoc: (projectId: string, input: NewDocumentInput) => void;
   onDeleteDoc: (projectId: string, docId: string) => void;
   readOnly?: boolean;
 }
 
-export function ProjectDocumentsModal({ project, isOpen, onClose, onUpdateProject, onDeleteDoc, readOnly = false }: ProjectDocumentsModalProps) {
+export function ProjectDocumentsModal({ project, isOpen, onClose, onAddDoc, onDeleteDoc, readOnly = false }: ProjectDocumentsModalProps) {
   const [isAddMode, setIsAddMode] = useState(false);
   const [docUploadMode, setDocUploadMode] = useState<'link' | 'file'>('link');
   const [dTitle, setDTitle] = useState('');
   const [dUrl, setDUrl] = useState('');
+  const [dFile, setDFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submitDoc = (e: React.FormEvent) => {
     e.preventDefault();
     if (!dTitle) return;
-
-    const newDoc: ProjectDoc = {
-      id: Date.now().toString(),
-      title: dTitle,
-      type: docUploadMode === 'link' ? 'LINK' : 'DOCUMENT',
-      url: dUrl || '#',
-      dateAdded: new Date().toISOString()
-    };
-
-    onUpdateProject(project.id, {
-      docs: [...project.docs, newDoc],
-      updatedAt: new Date().toISOString()
-    });
+    if (docUploadMode === 'link') {
+      if (!dUrl) return;
+      onAddDoc(project.id, { title: dTitle, type: 'LINK', url: dUrl });
+    } else {
+      if (!dFile) return;
+      onAddDoc(project.id, { title: dTitle, type: 'DOCUMENT', file: dFile });
+    }
 
     setDTitle('');
     setDUrl('');
+    setDFile(null);
     setIsAddMode(false);
   };
 
@@ -90,11 +88,28 @@ export function ProjectDocumentsModal({ project, isOpen, onClose, onUpdateProjec
               </div>
             </div>
           ) : (
-            <div className="border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg p-8 text-center bg-gray-50 dark:bg-gray-900/50">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-lg p-8 text-center bg-gray-50 dark:bg-gray-900/50 hover:border-gray-400 dark:hover:border-gray-600 transition-colors w-full"
+            >
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={(e) => setDFile(e.target.files?.[0] ?? null)}
+              />
               <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Click to upload or drag and drop</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">PDF, DOCX, or PNG (max. 10MB)</p>
-            </div>
+              {dFile ? (
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{dFile.name}</p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Click to choose a file</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">PDF, DOCX, or PNG (max. 10MB)</p>
+                </>
+              )}
+            </button>
           )}
 
           <div className="flex justify-end gap-3 mt-2">
@@ -107,7 +122,8 @@ export function ProjectDocumentsModal({ project, isOpen, onClose, onUpdateProjec
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+              disabled={docUploadMode === 'file' && !dFile}
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
               {docUploadMode === 'link' ? 'Attach Link' : 'Upload Document'}
             </button>
@@ -125,8 +141,8 @@ export function ProjectDocumentsModal({ project, isOpen, onClose, onUpdateProjec
             {project.docs.length} document{project.docs.length !== 1 ? 's' : ''}
           </p>
           {!readOnly && (
-            <button 
-              onClick={() => setIsAddMode(true)} 
+            <button
+              onClick={() => setIsAddMode(true)}
               className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               <Plus className="w-4 h-4" /> Add Document
@@ -157,7 +173,7 @@ export function ProjectDocumentsModal({ project, isOpen, onClose, onUpdateProjec
                     View
                   </a>
                   {!readOnly && (
-                    <button 
+                    <button
                       onClick={() => onDeleteDoc(project.id, doc.id)}
                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                       title="Remove Document"

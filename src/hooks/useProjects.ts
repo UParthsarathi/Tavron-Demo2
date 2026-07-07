@@ -1,161 +1,201 @@
-import { useState, useCallback, useRef } from 'react';
-import { Project, Engineer, Milestone, ProjectDoc, MilestoneStatus, EngineerTask, TaskStatus, TaskComment } from '../types';
-import { initialProjects } from '../data';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  dailyLogs as dailyLogsApi,
+  documents as documentsApi,
+  milestones as milestonesApi,
+  profiles as profilesApi,
+  projects as projectsApi,
+  tasks as tasksApi,
+} from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  DailyLog,
+  Engineer,
+  EngineerTask,
+  MilestoneStatus,
+  Project,
+  ProjectStatus,
+  TaskStatus,
+} from '@/types';
 
+export interface Notice {
+  type: 'success' | 'error';
+  label: string;
+}
+
+export type NewDocumentInput =
+  | { title: string; type: 'LINK'; url: string }
+  | { title: string; type: 'DOCUMENT'; file: File };
+
+/**
+ * The single state hub for backend data. Components call these functions and
+ * never touch the Supabase client directly (see src/lib/api).
+ *
+ * Mutation model: await the API call, then refetch. Data volumes are tiny
+ * (18 users), so refetching whole lists keeps the code simple and correct.
+ */
 export function useProjects() {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [lastAction, setLastAction] = useState<{ label: string, previousState: Project[] } | null>(null);
-  const undoTimeoutRef = useRef<number | null>(null);
+  const { profile } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [engineers, setEngineers] = useState<Engineer[]>([]);
+  const [standaloneTasks, setStandaloneTasks] = useState<EngineerTask[]>([]);
+  const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const noticeTimeoutRef = useRef<number | null>(null);
 
-  const commit = useCallback((newProjects: Project[], actionLabel: string | null = null) => {
-    if (actionLabel) {
-      setLastAction({ label: actionLabel, previousState: projects });
-      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-      undoTimeoutRef.current = window.setTimeout(() => setLastAction(null), 7000);
+  const showNotice = useCallback((n: Notice) => {
+    setNotice(n);
+    if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    noticeTimeoutRef.current = window.setTimeout(() => setNotice(null), 5000);
+  }, []);
+
+  const refetch = useCallback(async () => {
+    const [projectList, engineerList, standaloneList, logList] = await Promise.all([
+      projectsApi.fetchProjects(),
+      profilesApi.fetchEngineers(),
+      tasksApi.fetchStandaloneTasks(),
+      dailyLogsApi.fetchDailyLogs(),
+    ]);
+    setProjects(projectList);
+    setEngineers(engineerList);
+    setStandaloneTasks(standaloneList);
+    setLogs(logList);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    refetch()
+      .catch((e: Error) => { if (!cancelled) showNotice({ type: 'error', label: e.message }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [refetch, showNotice]);
+
+  /** Wraps a mutation: run, refetch, toast — errors become error toasts. */
+  const run = useCallback(
+    async (label: string | null, fn: () => Promise<void>): Promise<boolean> => {
+      try {
+        await fn();
+        await refetch();
+        if (label) showNotice({ type: 'success', label });
+        return true;
+      } catch (e) {
+        showNotice({ type: 'error', label: e instanceof Error ? e.message : 'Something went wrong' });
+        return false;
+      }
+    },
+    [refetch, showNotice]
+  );
+
+  // ---- projects ------------------------------------------------------------
+  const addProject = useCallback(async (name: string): Promise<string | null> => {
+    if (!profile) return null;
+    try {
+      const id = await projectsApi.createProject(name, profile.id);
+      await refetch();
+      showNotice({ type: 'success', label: 'Created project' });
+      return id;
+    } catch (e) {
+      showNotice({ type: 'error', label: e instanceof Error ? e.message : 'Failed to create project' });
+      return null;
     }
-    setProjects(newProjects);
-  }, [projects]);
+  }, [profile, refetch, showNotice]);
 
-  const undo = useCallback(() => {
-    if (lastAction) {
-      setProjects(lastAction.previousState);
-      setLastAction(null);
-      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-    }
-  }, [lastAction]);
+  const updateProjectStatus = useCallback((projectId: string, status: ProjectStatus) =>
+    run(
+      status === 'COMPLETED' ? 'Completed project' : status === 'ACTIVE' ? 'Reopened project' : 'Updated project',
+      () => projectsApi.updateProjectStatus(projectId, status)
+    ), [run]);
 
-  const addProject = useCallback((project: Project) => {
-    commit([project, ...projects], 'Created project');
-  }, [projects, commit]);
+  const deleteProject = useCallback((projectId: string) =>
+    run('Deleted project', () => projectsApi.deleteProject(projectId)), [run]);
 
-  const updateProject = useCallback((projectId: string, updates: Partial<Project>) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, ...updates, updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), updates.status === 'COMPLETED' ? 'Completed project' : updates.status === 'ACTIVE' ? 'Reopened project' : null); // null doesn't trigger toast for generic updates unless desired
-  }, [projects, commit]);
+  const addEngineerToProject = useCallback((projectId: string, engineer: Engineer) =>
+    run('Assigned engineer', () => projectsApi.addProjectMember(projectId, engineer.id)), [run]);
 
-  const deleteProject = useCallback((projectId: string) => {
-    commit(projects.filter(p => p.id !== projectId), 'Deleted project');
-  }, [projects, commit]);
+  const removeEngineerFromProject = useCallback((projectId: string, engineerId: string) =>
+    run('Removed engineer', () => projectsApi.removeProjectMember(projectId, engineerId)), [run]);
 
-  const addEngineerToProject = useCallback((projectId: string, engineer: Engineer) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        // Prevent duplicates
-        if (p.engineers.find(e => e.id === engineer.id)) return p;
-        return { ...p, engineers: [...p.engineers, engineer], updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Assigned engineer');
-  }, [projects, commit]);
+  // ---- milestones ----------------------------------------------------------
+  const addMilestone = useCallback(
+    (projectId: string, data: { title: string; dueDate: string; imageFile?: File | null }) =>
+      run('Added milestone', () => milestonesApi.addMilestone({ projectId, ...data })), [run]);
 
-  const removeEngineerFromProject = useCallback((projectId: string, engineerId: string) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, engineers: p.engineers.filter(e => e.id !== engineerId), updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Removed engineer');
-  }, [projects, commit]);
+  const updateMilestoneStatus = useCallback(
+    (_projectId: string, milestoneId: string, status: MilestoneStatus, proofImageFile?: File | null) =>
+      run(
+        status === 'COMPLETED' ? 'Completed milestone' : 'Reopened milestone',
+        () => milestonesApi.updateMilestoneStatus(milestoneId, status, proofImageFile)
+      ), [run]);
 
-  const addMilestone = useCallback((projectId: string, milestone: Milestone) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, milestones: [...p.milestones, milestone], updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Added milestone');
-  }, [projects, commit]);
+  const deleteMilestone = useCallback((_projectId: string, milestoneId: string) =>
+    run('Deleted milestone', () => milestonesApi.deleteMilestone(milestoneId)), [run]);
 
-  const updateMilestoneStatus = useCallback((projectId: string, milestoneId: string, status: MilestoneStatus, imageUrl?: string) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        const newMilestones = p.milestones.map(m => m.id === milestoneId ? { ...m, status, ...(imageUrl ? { imageUrl } : {}) } : m);
-        return { ...p, milestones: newMilestones, updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), status === 'COMPLETED' ? 'Completed milestone' : 'Reopened milestone');
-  }, [projects, commit]);
+  // ---- documents -----------------------------------------------------------
+  const addDocument = useCallback(
+    (projectId: string, input: NewDocumentInput) =>
+      run('Attached document', () => {
+        if (!profile) return Promise.reject(new Error('Not signed in'));
+        return input.type === 'LINK'
+          ? documentsApi.addLinkDocument({ projectId, title: input.title, url: input.url, createdBy: profile.id })
+          : documentsApi.uploadDocument({ projectId, title: input.title, file: input.file, createdBy: profile.id });
+      }), [run, profile]);
 
-  const deleteMilestone = useCallback((projectId: string, milestoneId: string) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, milestones: p.milestones.filter(m => m.id !== milestoneId), updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Deleted milestone');
-  }, [projects, commit]);
+  const deleteDocument = useCallback((_projectId: string, docId: string) =>
+    run('Removed document', () => documentsApi.deleteDocument(docId)), [run]);
 
-  const addDocument = useCallback((projectId: string, doc: ProjectDoc) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, docs: [...p.docs, doc], updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Attached document');
-  }, [projects, commit]);
-
-  const deleteDocument = useCallback((projectId: string, docId: string) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, docs: p.docs.filter(d => d.id !== docId), updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Removed document');
-  }, [projects, commit]);
-
-  const addTask = useCallback((projectId: string, task: EngineerTask) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, tasks: [...(p.tasks || []), task], updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Created task');
-  }, [projects, commit]);
-
-  const updateTaskStatus = useCallback((projectId: string, taskId: string, status: TaskStatus) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        const newTasks = p.tasks.map(t => t.id === taskId ? { ...t, status } : t);
-        return { ...p, tasks: newTasks, updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Updated task status');
-  }, [projects, commit]);
-
-  const deleteTask = useCallback((projectId: string, taskId: string) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, tasks: p.tasks.filter(t => t.id !== taskId), updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), 'Deleted task');
-  }, [projects, commit]);
-
-  const addTaskComment = useCallback((projectId: string, taskId: string, comment: TaskComment) => {
-    commit(projects.map(p => {
-      if (p.id === projectId) {
-        const newTasks = p.tasks.map(t => {
-          if (t.id === taskId) {
-            return { ...t, comments: [...(t.comments || []), comment] };
-          }
-          return t;
+  // ---- tasks ---------------------------------------------------------------
+  const addTask = useCallback(
+    (projectId: string | null, data: { title: string; engineerId: string }) =>
+      run('Created task', () => {
+        if (!profile) return Promise.reject(new Error('Not signed in'));
+        return tasksApi.createTask({
+          projectId,
+          assigneeId: data.engineerId,
+          title: data.title,
+          createdBy: profile.id,
         });
-        return { ...p, tasks: newTasks, updatedAt: new Date().toISOString() };
-      }
-      return p;
-    }), null);
-  }, [projects, commit]);
+      }), [run, profile]);
+
+  const updateTaskStatus = useCallback(
+    (_projectId: string | null, taskId: string, status: TaskStatus) =>
+      run('Updated task status', () => tasksApi.updateTaskStatus(taskId, status)), [run]);
+
+  const deleteTask = useCallback((_projectId: string | null, taskId: string) =>
+    run('Deleted task', () => tasksApi.deleteTask(taskId)), [run]);
+
+  const addTaskComment = useCallback(
+    (taskId: string, data: { content: string; imageFile?: File | null }) =>
+      run(null, () => {
+        if (!profile) return Promise.reject(new Error('Not signed in'));
+        return tasksApi.addTaskComment({ taskId, authorId: profile.id, ...data });
+      }), [run, profile]);
+
+  // ---- daily logs ----------------------------------------------------------
+  const addDailyLog = useCallback(
+    (data: { content: string; projectId?: string | null }) =>
+      run('Saved log', () => {
+        if (!profile) return Promise.reject(new Error('Not signed in'));
+        return dailyLogsApi.createDailyLog({ authorId: profile.id, ...data });
+      }), [run, profile]);
+
+  const updateDailyLog = useCallback((logId: string, content: string) =>
+    run('Updated log', () => dailyLogsApi.updateDailyLog(logId, content)), [run]);
+
+  const deleteDailyLog = useCallback((logId: string) =>
+    run('Deleted log', () => dailyLogsApi.deleteDailyLog(logId)), [run]);
 
   return {
     projects,
-    lastAction,
-    undo,
+    engineers,
+    standaloneTasks,
+    logs,
+    loading,
+    notice,
+    refetch,
     addProject,
-    updateProject,
+    updateProjectStatus,
     deleteProject,
     addEngineerToProject,
     removeEngineerFromProject,
@@ -167,6 +207,9 @@ export function useProjects() {
     addTask,
     updateTaskStatus,
     deleteTask,
-    addTaskComment
+    addTaskComment,
+    addDailyLog,
+    updateDailyLog,
+    deleteDailyLog,
   };
 }

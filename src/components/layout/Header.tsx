@@ -1,25 +1,34 @@
-import { Hexagon, Moon, Sun, LayoutDashboard, ListTodo, Zap, MessageSquare } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Hexagon, Moon, Sun, LayoutDashboard, ListTodo, Zap, MessageSquare, NotebookPen, SquareCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { determineUserRole } from '@/types/roles';
+
+export type AppView =
+  | 'projects'
+  | 'dashboard'
+  | 'actions'
+  | 'account'
+  | 'messages'
+  | 'add_engineer'
+  | 'delegate'
+  | 'tasks'
+  | 'logs';
 
 export interface HeaderProps {
-  currentView?: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer';
-  onViewChange?: (view: 'projects' | 'dashboard' | 'actions' | 'account' | 'messages' | 'add_engineer') => void;
+  currentView?: AppView;
+  onViewChange?: (view: AppView) => void;
 }
 
 export function Header({ currentView = 'projects', onViewChange }: HeaderProps) {
-  const { user } = useAuth();
-  const userRole = determineUserRole(user?.email);
-  const username = user?.email?.split('@')[0] || 'User';
-  
+  const { profile, role } = useAuth();
+  const username = profile?.name || profile?.email?.split('@')[0] || 'User';
+
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
         const themeInLoc = 'theme' in localStorage;
         const mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-        return document.documentElement.classList.contains('dark') || 
+        return document.documentElement.classList.contains('dark') ||
           (!themeInLoc && mql ? mql.matches : false);
       } catch (e) {
         return false;
@@ -39,6 +48,21 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
     }
   }, [isDark]);
 
+  const navButton = (view: AppView, label: string, icon: React.ReactNode) => (
+    <button
+      onClick={() => onViewChange?.(view)}
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+        currentView === view
+          ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm"
+          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
   return (
     <header className="w-full flex items-center justify-between px-3 sm:px-8 py-2.5 sm:py-5 border-b border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-950/50 backdrop-blur-sm sticky top-0 z-50 transition-colors duration-200">
       <div className="flex items-center gap-4 sm:gap-6">
@@ -48,77 +72,28 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
           </div>
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-gray-900 dark:text-white mr-2 sm:mr-4">Tavron</h1>
         </div>
-        
+
         {onViewChange && (
           <nav className="hidden sm:flex items-center gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
-            <button
-              onClick={() => onViewChange('projects')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                currentView === 'projects' 
-                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm" 
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              )}
-            >
-              <ListTodo className="w-4 h-4" />
-              Projects
-            </button>
-            
-            {userRole === 'MANAGER' && (
-              <button
-                onClick={() => onViewChange('dashboard')}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                  currentView === 'dashboard' 
-                    ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm" 
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                )}
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                Dashboard
-              </button>
-            )}
-            
-            {userRole === 'MANAGER' && (
-              <button
-                onClick={() => onViewChange('actions')}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                  currentView === 'actions' 
-                    ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm" 
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                )}
-              >
-                <Zap className="w-4 h-4" />
-                Quick Actions
-              </button>
-            )}
-
-            <button
-              onClick={() => onViewChange('messages')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                currentView === 'messages' 
-                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm" 
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              )}
-            >
-              <MessageSquare className="w-4 h-4" />
-              Comm
-            </button>
+            {navButton('projects', 'Projects', <ListTodo className="w-4 h-4" />)}
+            {role === 'MANAGER' && navButton('dashboard', 'Dashboard', <LayoutDashboard className="w-4 h-4" />)}
+            {role === 'MANAGER' && navButton('actions', 'Quick Actions', <Zap className="w-4 h-4" />)}
+            {role === 'ENGINEER' && navButton('tasks', 'My Tasks', <SquareCheck className="w-4 h-4" />)}
+            {navButton('logs', 'Daily Logs', <NotebookPen className="w-4 h-4" />)}
+            {navButton('messages', 'Comm', <MessageSquare className="w-4 h-4" />)}
           </nav>
         )}
       </div>
 
       <div className="flex items-center gap-3 sm:gap-6">
-        <button 
+        <button
           onClick={() => setIsDark(!isDark)}
           className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
           title="Toggle Dark Mode"
         >
           {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
-        <button 
+        <button
           onClick={() => onViewChange?.('account')}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
         >

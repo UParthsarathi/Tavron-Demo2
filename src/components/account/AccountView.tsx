@@ -3,8 +3,8 @@ import { motion } from 'motion/react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function AccountView() {
-  const { user, signOut } = useAuth();
-  
+  const { user, profile, signOut } = useAuth();
+
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-8 py-4 sm:py-8 animate-in fade-in duration-500">
       <div className="mb-4 sm:mb-8">
@@ -20,9 +20,9 @@ export function AccountView() {
               {user?.email?.charAt(0).toUpperCase() || 'U'}
             </div>
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-              {user?.email?.split('@')[0] || 'User'}
+              {profile?.name || user?.email?.split('@')[0] || 'User'}
             </h3>
-            <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">{user?.email}</p>
+            <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">{profile?.email || user?.email}</p>
             
             <button className="w-full py-2 sm:py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white text-sm font-medium rounded-xl transition-colors">
               Edit Profile
@@ -90,11 +90,17 @@ export function AccountView() {
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div className="p-3 sm:p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50">
                 <p className="text-xs text-gray-500 mb-1">Member Since</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Oct 2023</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {user?.created_at
+                    ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+                    : '—'}
+                </p>
               </div>
               <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50">
                 <p className="text-xs text-gray-500 mb-1">Role</p>
-                <p className="text-sm font-medium text-brand-green-text">Administrator</p>
+                <p className="text-sm font-medium text-brand-green-text">
+                  {profile?.role === 'MANAGER' ? 'Project Manager' : profile?.discipline || 'Engineer'}
+                </p>
               </div>
             </div>
           </div>

@@ -1,34 +1,19 @@
 import React, { useState } from 'react';
-import { generateId } from '@/lib/utils';
-import { Project } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (project: Project) => void;
+  onSubmit: (name: string) => void;
 }
 
 export function CreateProjectModal({ isOpen, onClose, onSubmit }: CreateProjectModalProps) {
   const [name, setName] = useState('');
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-
-    const newProject: Project = {
-      id: generateId(),
-      name,
-      status: 'ACTIVE',
-      engineers: [],
-      milestones: [],
-      docs: [],
-      tasks: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    onSubmit(newProject);
+    onSubmit(name.trim());
     setName('');
     onClose();
   };
@@ -47,7 +32,7 @@ export function CreateProjectModal({ isOpen, onClose, onSubmit }: CreateProjectM
             autoFocus
           />
         </div>
-        
+
         <div className="flex justify-end gap-3 mt-2">
           <button
             type="button"

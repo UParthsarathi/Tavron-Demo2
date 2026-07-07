@@ -1,44 +1,47 @@
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, Plus, Users, Calendar, FileText, CircleCheck, Circle, SquareCheck, ListTodo, UploadCloud, Trash2, Undo2, MessageCircle, Send, Image as ImageIcon, X } from 'lucide-react';
-import { Project, Engineer, Milestone, ProjectDoc, MilestoneStatus, EngineerTask, TaskStatus, TaskComment } from '@/types';
-import { formatTimeAgo, generateId, cn } from '@/lib/utils';
-import { mockEngineers } from '@/data';
+import { ArrowLeft, Plus, Users, Calendar, FileText, CircleCheck, Circle, SquareCheck, ListTodo, Trash2, Undo2, MessageCircle, Send, Image as ImageIcon, X } from 'lucide-react';
+import { Engineer, MilestoneStatus, ProjectStatus, Project, TaskStatus } from '@/types';
+import { formatTimeAgo, cn } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { CompleteProjectModal } from './CompleteProjectModal';
 import { ProjectDocumentsModal } from './ProjectDocumentsModal';
 import { motion } from 'motion/react';
+import { useAuth } from '@/contexts/AuthContext';
+import type { NewDocumentInput } from '@/hooks/useProjects';
 
 interface ProjectDetailsProps {
   project: Project;
+  allEngineers: Engineer[];
   onBack: () => void;
-  onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
+  onUpdateProjectStatus: (projectId: string, status: ProjectStatus) => void;
   onDeleteProject: () => void;
   onAddEngineer: (projectId: string, eng: Engineer) => void;
   onRemoveEngineer: (projectId: string, engId: string) => void;
-  onAddMilestone: (projectId: string, milestone: Milestone) => void;
-  onUpdateMilestoneStatus: (projectId: string, milestoneId: string, status: MilestoneStatus, imageUrl?: string) => void;
+  onAddMilestone: (projectId: string, data: { title: string; dueDate: string; imageFile?: File | null }) => void;
+  onUpdateMilestoneStatus: (projectId: string, milestoneId: string, status: MilestoneStatus, proofImageFile?: File | null) => void;
   onDeleteMilestone: (projectId: string, milestoneId: string) => void;
-  onAddDoc: (projectId: string, doc: ProjectDoc) => void;
+  onAddDoc: (projectId: string, input: NewDocumentInput) => void;
   onDeleteDoc: (projectId: string, docId: string) => void;
-  onAddTask: (projectId: string, task: EngineerTask) => void;
-  onUpdateTaskStatus: (projectId: string, taskId: string, status: TaskStatus) => void;
-  onDeleteTask: (projectId: string, taskId: string) => void;
-  onAddTaskComment: (projectId: string, taskId: string, comment: TaskComment) => void;
+  onAddTask: (projectId: string, data: { title: string; engineerId: string }) => void;
+  onUpdateTaskStatus: (projectId: string | null, taskId: string, status: TaskStatus) => void;
+  onDeleteTask: (projectId: string | null, taskId: string) => void;
+  onAddTaskComment: (taskId: string, data: { content: string; imageFile?: File | null }) => void;
   onDiscussTask?: (taskId: string) => void;
   readOnly?: boolean;
 }
 
-export function ProjectDetails({ 
-  project, 
-  onBack, 
-  onUpdateProject, 
+export function ProjectDetails({
+  project,
+  allEngineers,
+  onBack,
+  onUpdateProjectStatus,
   onDeleteProject,
-  onAddEngineer, 
+  onAddEngineer,
   onRemoveEngineer,
-  onAddMilestone, 
+  onAddMilestone,
   onUpdateMilestoneStatus,
   onDeleteMilestone,
-  onAddDoc, 
+  onAddDoc,
   onDeleteDoc,
   onAddTask,
   onUpdateTaskStatus,
@@ -47,8 +50,9 @@ export function ProjectDetails({
   onDiscussTask,
   readOnly = false
 }: ProjectDetailsProps) {
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'engineers' | 'tasks' | 'milestones'>('overview');
-  
+
   // Modals state
   const [isEngModalOpen, setEngModalOpen] = useState(false);
   const [isMilestoneModalOpen, setMilestoneModalOpen] = useState(false);
@@ -73,22 +77,9 @@ export function ProjectDetails({
   const [taskCommentImage, setTaskCommentImage] = useState<File | null>(null);
   const taskImageInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSendMessage = (taskId: string, role: 'MANAGER' | 'ENGINEER', authorName: string) => {
+  const handleSendMessage = (taskId: string) => {
     if (!taskCommentText.trim() && !taskCommentImage) return;
-
-    let imageUrl = undefined;
-    if (taskCommentImage) {
-      imageUrl = URL.createObjectURL(taskCommentImage);
-    }
-
-    onAddTaskComment(project.id, taskId, {
-      id: generateId(),
-      authorRole: role,
-      authorName,
-      content: taskCommentText.trim(),
-      imageUrl,
-      createdAt: new Date().toISOString()
-    });
+    onAddTaskComment(taskId, { content: taskCommentText.trim(), imageFile: taskCommentImage });
     setTaskCommentText('');
     setTaskCommentImage(null);
   };
@@ -96,18 +87,10 @@ export function ProjectDetails({
   const submitMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!mTitle || !mDate) return;
-    
-    let imageUrl = '';
-    if (mImage) {
-      imageUrl = URL.createObjectURL(mImage);
-    }
-    
     onAddMilestone(project.id, {
-      id: generateId(),
       title: mTitle,
-      dueDate: new Date(mDate).toISOString(),
-      status: 'PENDING',
-      imageUrl
+      dueDate: new Date(mDate).toISOString().slice(0, 10),
+      imageFile: mImage,
     });
     setMTitle(''); setMDate(''); setMImage(null);
     setMilestoneModalOpen(false);
@@ -116,10 +99,7 @@ export function ProjectDetails({
   const submitCompleteMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!completeMilestoneId || !completeMilestoneImage) return;
-
-    const imageUrl = URL.createObjectURL(completeMilestoneImage);
-    onUpdateMilestoneStatus(project.id, completeMilestoneId, 'COMPLETED', imageUrl);
-    
+    onUpdateMilestoneStatus(project.id, completeMilestoneId, 'COMPLETED', completeMilestoneImage);
     setCompleteMilestoneId(null);
     setCompleteMilestoneImage(null);
   };
@@ -127,26 +107,20 @@ export function ProjectDetails({
   const submitTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tTitle || !tEngineerId) return;
-    onAddTask(project.id, {
-      id: generateId(),
-      title: tTitle,
-      engineerId: tEngineerId,
-      status: 'TODO',
-      createdAt: new Date().toISOString()
-    });
+    onAddTask(project.id, { title: tTitle, engineerId: tEngineerId });
     setTTitle(''); setTEngineerId('');
     setTaskModalOpen(false);
   };
 
   // Filter available engineers to not show ones already in project
-  const availableEngineers = mockEngineers.filter(me => !project.engineers.find(e => e.id === me.id));
+  const availableEngineers = allEngineers.filter(me => !project.engineers.find(e => e.id === me.id));
 
   // Modal functions
   return (
     <div className="w-full max-w-5xl mx-auto px-3 sm:px-8 py-4 sm:py-8">
       {/* Header */}
       <div className="mb-4 sm:mb-8">
-        <button 
+        <button
           onClick={onBack}
           className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-4"
         >
@@ -159,22 +133,22 @@ export function ProjectDetails({
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Last updated {formatTimeAgo(project.updatedAt)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <button 
+            <button
               onClick={() => setViewDocsModalOpen(true)}
               className="flex items-center gap-1.5 text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-full hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
             >
               <FileText className="w-4 h-4" /> Documents
             </button>
             {!readOnly && project.status === 'ACTIVE' ? (
-              <button 
+              <button
                 onClick={() => setCompleteModalOpen(true)}
                 className="text-sm font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-sm"
               >
                 Complete<span className="hidden sm:inline"> Project</span>
               </button>
             ) : !readOnly && project.status !== 'ACTIVE' ? (
-               <button 
-                onClick={() => onUpdateProject(project.id, { status: 'ACTIVE', updatedAt: new Date().toISOString() })}
+               <button
+                onClick={() => onUpdateProjectStatus(project.id, 'ACTIVE')}
                 className="flex items-center gap-1.5 text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-full hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
               >
                 <Undo2 className="w-4 h-4" /> Re-open
@@ -216,8 +190,8 @@ export function ProjectDetails({
             onClick={() => setActiveTab(tab.id as any)}
             className={cn(
               "px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
-              activeTab === tab.id 
-                ? "border-gray-900 dark:border-white text-gray-900 dark:text-white" 
+              activeTab === tab.id
+                ? "border-gray-900 dark:border-white text-gray-900 dark:text-white"
                 : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             )}
           >
@@ -309,7 +283,7 @@ export function ProjectDetails({
                       </div>
                     </div>
                     {!readOnly && (
-                      <button 
+                      <button
                         onClick={() => onRemoveEngineer(project.id, e.id)}
                         className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
                         title="Remove Engineer"
@@ -329,7 +303,7 @@ export function ProjectDetails({
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Engineer Tasks</h3>
               {!readOnly && (
-                <button 
+                <button
                   onClick={() => setTaskModalOpen(true)}
                   disabled={project.engineers.length === 0}
                   className="flex items-center gap-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -346,6 +320,8 @@ export function ProjectDetails({
               <div className="space-y-4">
                 {project.tasks.map(t => {
                   const assignee = project.engineers.find(e => e.id === t.engineerId);
+                  // Engineers may change the status of their own tasks even in read-only mode.
+                  const canUpdateStatus = !readOnly || t.engineerId === profile?.id;
                   return (
                     <div key={t.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
                       <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -376,7 +352,7 @@ export function ProjectDetails({
                             </div>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2 md:pl-0 pl-9">
                           <button
                             onClick={() => setExpandedTaskId(expandedTaskId === t.id ? null : t.id)}
@@ -389,15 +365,15 @@ export function ProjectDetails({
                           <select
                             value={t.status}
                             onChange={(e) => onUpdateTaskStatus(project.id, t.id, e.target.value as TaskStatus)}
-                            disabled={readOnly}
-                            className={cn("text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white", readOnly ? "opacity-70 cursor-not-allowed" : "")}
+                            disabled={!canUpdateStatus}
+                            className={cn("text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white", !canUpdateStatus ? "opacity-70 cursor-not-allowed" : "")}
                           >
                             <option value="TODO">To Do</option>
                             <option value="IN_PROGRESS">In Progress</option>
                             <option value="DONE">Done</option>
                           </select>
                           {!readOnly && (
-                            <button 
+                            <button
                               onClick={() => onDeleteTask(project.id, t.id)}
                               className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                               title="Delete Task"
@@ -422,25 +398,28 @@ export function ProjectDetails({
                             {(!t.comments || t.comments.length === 0) ? (
                               <p className="text-sm text-gray-500 dark:text-gray-400 italic text-center py-4">No messages yet. Start the discussion.</p>
                             ) : (
-                              t.comments.map(c => (
-                                <div key={c.id} className={cn("flex flex-col max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl", c.authorRole === 'MANAGER' ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 self-end rounded-br-sm shadow-sm" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white self-start rounded-bl-sm shadow-sm")}>
-                                  <span className={cn("text-[10px] uppercase font-bold tracking-wider mb-1", c.authorRole === 'MANAGER' ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400")}>
-                                    {c.authorName}
-                                  </span>
-                                  {c.imageUrl && (
-                                    <div className="mb-2 w-full max-w-xs rounded-lg overflow-hidden border border-gray-200/20 dark:border-gray-700/50">
-                                      <img src={c.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
-                                    </div>
-                                  )}
-                                  <span className="text-sm leading-relaxed">{c.content}</span>
-                                  <span className={cn("text-[10px] mt-1.5 self-end flex items-center gap-1.5", c.authorRole === 'MANAGER' ? "text-gray-400 dark:text-gray-500" : "text-gray-400 dark:text-gray-500")}>
-                                    {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                </div>
-                              ))
+                              t.comments.map(c => {
+                                const isMe = c.authorId === profile?.id;
+                                return (
+                                  <div key={c.id} className={cn("flex flex-col max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl", isMe ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 self-end rounded-br-sm shadow-sm" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white self-start rounded-bl-sm shadow-sm")}>
+                                    <span className={cn("text-[10px] uppercase font-bold tracking-wider mb-1", isMe ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400")}>
+                                      {c.authorName}
+                                    </span>
+                                    {c.imageUrl && (
+                                      <div className="mb-2 w-full max-w-xs rounded-lg overflow-hidden border border-gray-200/20 dark:border-gray-700/50">
+                                        <img src={c.imageUrl} alt="attachment" className="w-full h-auto object-cover" />
+                                      </div>
+                                    )}
+                                    <span className="text-sm leading-relaxed">{c.content}</span>
+                                    <span className="text-[10px] mt-1.5 self-end flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
+                                      {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
-                          
+
                           {taskCommentImage && (
                             <div className="mb-3 relative group w-16 h-16 rounded-lg overflow-hidden border-2 border-gray-200 dark:border-gray-700">
                               <img src={URL.createObjectURL(taskCommentImage)} alt="Preview" className="w-full h-full object-cover" />
@@ -480,26 +459,17 @@ export function ProjectDetails({
                               onChange={e => setTaskCommentText(e.target.value)}
                               onKeyDown={e => {
                                 if (e.key === 'Enter') {
-                                  handleSendMessage(t.id, 'MANAGER', 'Manager');
+                                  handleSendMessage(t.id);
                                 }
                               }}
                             />
                             <button
-                              onClick={() => handleSendMessage(t.id, 'MANAGER', 'Manager')}
+                              onClick={() => handleSendMessage(t.id)}
                               className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 p-2.5 h-10 w-10 flex items-center justify-center rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-sm flex-shrink-0"
-                              title="Send as Manager"
+                              title="Send"
                             >
                               <Send className="w-4 h-4" />
                             </button>
-                            {assignee && (
-                              <button
-                                onClick={() => handleSendMessage(t.id, 'ENGINEER', assignee.name)}
-                                className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 h-10 px-3 text-xs font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm whitespace-nowrap flex-shrink-0"
-                                title="Simulate Engineer Reply"
-                              >
-                                Eng. Reply
-                              </button>
-                            )}
                           </div>
                         </div>
                       )}
@@ -531,7 +501,7 @@ export function ProjectDetails({
               <div className="relative pl-3 md:pl-0 py-4">
                 {/* Vertical Timeline Line (desktop centered, mobile left) */}
                 <div className="absolute left-[27px] md:left-1/2 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-800 transform md:-translate-x-1/2" />
-                
+
                 <div className="space-y-8 relative">
                   {[...project.milestones].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).map((m, idx) => {
                     const isEven = idx % 2 === 0;
@@ -541,7 +511,7 @@ export function ProjectDetails({
                     const today = new Date();
                     today.setHours(0,0,0,0);
                     const isPastDue = dueDate < today && m.status !== 'COMPLETED';
-                    
+
                     return (
                       <div key={m.id} className={cn("relative flex items-center justify-between md:justify-normal w-full", isEven ? "md:flex-row-reverse" : "md:flex-row")}>
                         {/* Timeline Node */}
@@ -552,15 +522,15 @@ export function ProjectDetails({
                             <Circle className={cn("w-4 h-4", isPastDue ? "text-amber-500 fill-amber-50 dark:fill-amber-900/30" : "text-gray-300 dark:text-gray-700 fill-gray-50 dark:fill-gray-800")} />
                           )}
                         </div>
-                        
+
                         {/* Empty Space for alternate side on desktop */}
                         <div className="hidden md:block w-1/2" />
-                        
+
                         {/* Content Card */}
                         <div className={cn("w-full md:w-1/2 pl-14 md:pl-0", isEven ? "md:pr-12" : "md:pl-12")}>
                           <div className={cn(
                             "p-5 rounded-2xl border transition-all duration-200",
-                            m.status === 'COMPLETED' ? "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800" : 
+                            m.status === 'COMPLETED' ? "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800" :
                             isPastDue ? "bg-red-50/30 dark:bg-red-900/10 border-red-200 dark:border-red-900/30 shadow-sm" : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-md"
                           )}>
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
@@ -583,25 +553,25 @@ export function ProjectDetails({
                                   )}
                                 </div>
                               </div>
-                              
+
                               {!readOnly && (
                                 <>
                                   {m.status !== 'COMPLETED' ? (
-                                    <button 
+                                    <button
                                       onClick={() => setCompleteMilestoneId(m.id)}
                                       className="text-xs font-semibold bg-white dark:bg-gray-900 hover:bg-brand-green dark:hover:bg-brand-green/20 hover:text-brand-green-text text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-brand-green-text px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm group"
                                     >
                                       <span className="flex items-center gap-1.5"><CircleCheck className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" /> Complete</span>
                                     </button>
                                   ) : (
-                                    <button 
+                                    <button
                                       onClick={() => onUpdateMilestoneStatus(project.id, m.id, 'PENDING')}
                                       className="text-xs font-semibold bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm group flex items-center gap-1.5"
                                     >
                                       <Undo2 className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" /> Undo
                                     </button>
                                   )}
-                                  <button 
+                                  <button
                                     onClick={() => onDeleteMilestone(project.id, m.id)}
                                     className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                                     title="Delete Milestone"
@@ -629,7 +599,7 @@ export function ProjectDetails({
             <p className="text-sm text-gray-500 dark:text-gray-400">All available engineers are assigned to this project.</p>
           ) : (
             availableEngineers.map(e => (
-              <button 
+              <button
                 key={e.id}
                 onClick={() => { onAddEngineer(project.id, e); setEngModalOpen(false); }}
                 className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-800 rounded-lg hover:border-gray-900 dark:hover:border-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-left"
@@ -689,7 +659,7 @@ export function ProjectDetails({
         project={project}
         isOpen={isViewDocsModalOpen}
         onClose={() => setViewDocsModalOpen(false)}
-        onUpdateProject={onUpdateProject}
+        onAddDoc={onAddDoc}
         onDeleteDoc={onDeleteDoc}
         readOnly={readOnly}
       />
@@ -755,12 +725,12 @@ export function ProjectDetails({
         </form>
       </Modal>
 
-      <CompleteProjectModal 
+      <CompleteProjectModal
         project={project}
         isOpen={isCompleteModalOpen}
         onClose={() => setCompleteModalOpen(false)}
         onConfirm={() => {
-          onUpdateProject(project.id, { status: 'COMPLETED', updatedAt: new Date().toISOString() });
+          onUpdateProjectStatus(project.id, 'COMPLETED');
           setCompleteModalOpen(false);
         }}
       />
