@@ -31,6 +31,11 @@ export function MessagesView({ projects = [], standaloneTasks = [], initialChatI
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  // Follow new messages only while the reader is near the bottom, so an
+  // incoming message never yanks someone reading history.
+  const stickToBottomRef = useRef(true);
+  const lastChatRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (initialChatId) {
@@ -68,6 +73,24 @@ export function MessagesView({ projects = [], standaloneTasks = [], initialChatI
   const activeChat = allChats.find(c => c.id === selectedChat);
   const activeTaskComments = activeChat?.task.comments ?? [];
 
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    if (lastChatRef.current !== selectedChat) {
+      // Opening a chat: jump straight to the latest message.
+      lastChatRef.current = selectedChat;
+      stickToBottomRef.current = true;
+      el.scrollTop = el.scrollHeight;
+    } else if (stickToBottomRef.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [selectedChat, activeTaskComments.length]);
+
+  const handleMessagesScroll = () => {
+    const el = messagesRef.current;
+    if (el) stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setAttachedImage(file);
@@ -78,6 +101,8 @@ export function MessagesView({ projects = [], standaloneTasks = [], initialChatI
     if (!messageText.trim() && !attachedImage) return;
 
     if (activeChat && onAddTaskComment) {
+      // Sending always snaps the view to your own message.
+      stickToBottomRef.current = true;
       onAddTaskComment(activeChat.task.id, {
         content: messageText.trim(),
         imageFile: attachedImage,
@@ -178,7 +203,7 @@ export function MessagesView({ projects = [], standaloneTasks = [], initialChatI
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px]">
+            <div ref={messagesRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-4 space-y-6 bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px]">
               <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm mb-6">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Task Discussion Context</h4>
                 <p className="text-sm text-gray-500 dark:text-gray-400">

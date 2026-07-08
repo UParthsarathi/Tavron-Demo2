@@ -58,6 +58,20 @@ One line per decision. Update lines in place; don't duplicate.
 - `src/types/database.ts` generated from the live schema; regenerate after every migration.
 - RLS verified by an independent subagent (2026-07-07): 72/72 access-matrix assertions PASS, including anon-role sweep and non-member engineer cells; all tests ran in rolled-back transactions. Caveat noted: task_comments immutability relies on the absence of UPDATE/DELETE policies — don't add broad policies there later.
 
+## Realtime & chat responsiveness (2026-07-08)
+- App tables added to the `supabase_realtime` publication; the frontend subscribes to
+  `postgres_changes` (`src/lib/api/realtime.ts`). Events from other clients drive updates.
+- Chat is the one deliberate exception to the "mutate → refetch everything" rule:
+  - Sends are optimistic (message renders at tap time with a temp id; the confirmed row
+    replaces it; failures remove it with an error toast). In-flight optimistic comments are
+    re-applied after any refetch so a background refresh can't wipe them.
+  - Incoming `task_comments` INSERT events patch one fetched row into state instead of
+    triggering a refetch (`fetchTaskComment`: single-row read under the reader's own RLS).
+  - Everything else still uses debounced (1s) refetch-everything. The debounce is 1s because
+    the `touch_parent_project` trigger turns every chat message into a `projects` UPDATE event.
+- Trade-off accepted: optimistic UI adds failure-handling complexity in `useProjects`, but
+  chat is where latency is felt; all other mutations keep the simple await-then-refetch model.
+
 ## Open questions
 - (none currently)
 
