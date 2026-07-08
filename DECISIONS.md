@@ -63,14 +63,45 @@ One line per decision. Update lines in place; don't duplicate.
   `postgres_changes` (`src/lib/api/realtime.ts`). Events from other clients drive updates.
 - Chat is the one deliberate exception to the "mutate → refetch everything" rule:
   - Sends are optimistic (message renders at tap time with a temp id; the confirmed row
-    replaces it; failures remove it with an error toast). In-flight optimistic comments are
-    re-applied after any refetch so a background refresh can't wipe them.
-  - Incoming `task_comments` INSERT events patch one fetched row into state instead of
-    triggering a refetch (`fetchTaskComment`: single-row read under the reader's own RLS).
-  - Everything else still uses debounced (1s) refetch-everything. The debounce is 1s because
-    the `touch_parent_project` trigger turns every chat message into a `projects` UPDATE event.
-- Trade-off accepted: optimistic UI adds failure-handling complexity in `useProjects`, but
-  chat is where latency is felt; all other mutations keep the simple await-then-refetch model.
+    replaces it; failures stay flagged in the thread so the text isn't lost).
+  - Incoming message INSERT events patch one fetched row into state instead of triggering
+    a refetch (single-row read under the reader's own RLS).
+  - Structural changes still use the debounced refetch-everything model in `useProjects`;
+    chat tables are excluded from that lane so chat volume never causes full refetches.
+- Trade-off accepted: optimistic UI adds failure-handling complexity, but chat is where
+  latency is felt; all other mutations keep the simple await-then-refetch model.
+
+## Messages inbox redesign (2026-07-08) — goal: replace the team's WhatsApp
+- Owner's product goal: Tavron replaces WhatsApp for *work* communication (16 engineers,
+  2 managers, 4–5 concurrent projects). DMs and social chatter deliberately NOT replicated
+  beyond 1:1 — see below.
+- Unified conversation model (`conversations` + `messages` + `conversation_reads`), replacing
+  `task_comments` (rows migrated, ids/timestamps preserved, table dropped):
+  - Types: TASK (per task), MILESTONE (per milestone), PROJECT ("General" channel), DM (1:1).
+  - Entity conversations are created by DB triggers on project/task/milestone insert;
+    DMs are created by the client (`startDm`, ordered pair + unique index handles races).
+  - `fetch_inbox()` RPC (SECURITY INVOKER) returns every visible conversation with last-message
+    preview and unread count in one round trip. `conversation_reads` powers unread badges.
+  - Messages no longer bump `projects.updated_at`; the inbox sorts on
+    `conversations.last_message_at` (trigger-maintained).
+- 1:1 DMs reversed the earlier "no DMs" decision *because* the goal changed to replacing
+  WhatsApp: if Tavron can't host private work chat, WhatsApp survives and pulls everything
+  back. Guardrails: 1:1 only (no group DMs — project channels are the groups), culture rule
+  that task decisions get repeated in the task thread.
+- Threading: reply-quotes (`messages.reply_to`, WhatsApp-style) instead of Slack-style nested
+  threads — the team's mental model, and unread/push logic stays simple. Topic drift in
+  General should become a task/milestone thread, not a nested chat.
+- UI: inbox sidebar grouped by project (General pinned first), activity-sorted with previews
+  and unread badges (rolled up on collapsed sections + the Comm nav tab), DM section with
+  team picker, DONE-task threads auto-archive. Empty task/milestone threads are hidden in the
+  sidebar and reachable from their entity's "Discuss" button. ProjectDetails' inline task chat
+  was removed — Messages is the single chat surface.
+- Two RLS/PostgREST gotchas fixed during verification (machine-verified end-to-end):
+  - `conversations` SELECT policy must be inline over row columns, not a self-querying helper —
+    INSERT ... RETURNING can't see its own row through a function's snapshot.
+  - Self-referencing embed must be spelled `reply:reply_to(...)`; `messages!reply_to` resolves
+    to the child direction.
+- Next phases agreed with owner: PWA + Web Push notifications (adoption-critical), voice notes.
 
 ## Open questions
 - (none currently)
