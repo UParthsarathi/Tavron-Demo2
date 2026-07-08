@@ -13,6 +13,8 @@ import { TasksView } from '@/components/tasks/TasksView';
 import { DailyLogsView } from '@/components/logs/DailyLogsView';
 import { useProjects } from '@/hooks/useProjects';
 import { useConversations } from '@/hooks/useConversations';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { EnableNotificationsBanner } from '@/components/layout/EnableNotificationsBanner';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -69,6 +71,10 @@ export function ManagerLayout() {
     setCurrentView('messages');
   };
 
+  const push = usePushNotifications({
+    onOpenConversation: (id) => openChat({ kind: 'conversation', id }),
+  });
+
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-[#0a0a0a] transition-colors duration-200 relative selection:bg-gray-200 dark:selection:bg-gray-800 flex flex-col">
       {/* Subtle Dot Pattern Background */}
@@ -76,6 +82,8 @@ export function ManagerLayout() {
 
       <div className="relative z-10 flex-1 flex flex-col">
         <Header currentView={currentView} onViewChange={changeView} messagesBadge={chat.unreadTotal} />
+
+        <EnableNotificationsBanner push={push} />
 
         <main className="w-full relative pb-20 sm:pb-8 flex-1">
         {loading ? (

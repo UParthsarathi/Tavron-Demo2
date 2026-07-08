@@ -13,7 +13,9 @@ import type { UseConversationsReturn } from '@/hooks/useConversations';
 export type ChatTarget =
   | { kind: 'task'; id: string }
   | { kind: 'milestone'; id: string }
-  | { kind: 'project'; id: string };
+  | { kind: 'project'; id: string }
+  // Directly by conversation id — what a push notification deep-links to.
+  | { kind: 'conversation'; id: string };
 
 export interface MessagesViewProps {
   chat: UseConversationsReturn;
@@ -84,6 +86,7 @@ export function MessagesView({ chat, initialTarget = null }: MessagesViewProps) 
     const item = inbox.find((i) =>
       initialTarget.kind === 'task' ? i.taskId === initialTarget.id :
       initialTarget.kind === 'milestone' ? i.milestoneId === initialTarget.id :
+      initialTarget.kind === 'conversation' ? i.conversationId === initialTarget.id :
       i.type === 'PROJECT' && i.projectId === initialTarget.id
     );
     if (item) {

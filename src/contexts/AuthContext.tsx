@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { profiles as profilesApi } from '@/lib/api';
+import { profiles as profilesApi, push as pushApi } from '@/lib/api';
 import type { Profile, UserRole } from '@/types';
 
 interface AuthContextType {
@@ -61,6 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   const signOut = async () => {
+    // While still authenticated: stop this device from receiving the signed-
+    // out user's messages (shared phones/desktops). Best-effort by design.
+    await pushApi.removeCurrentDeviceSubscription();
     await supabase.auth.signOut();
   };
 

@@ -103,6 +103,40 @@ One line per decision. Update lines in place; don't duplicate.
     to the child direction.
 - Next phases agreed with owner: PWA + Web Push notifications (adoption-critical), voice notes.
 
+## PWA + Web Push notifications (2026-07-08/09) — Phase 2
+- PWA layer: `manifest.webmanifest` + icons (generated once by `scripts/make-icons.mjs`, sharp);
+  `public/sw.js` is **push-only** — deliberately no offline cache (app is useless without the
+  network; a cache adds stale-bundle failure modes for zero benefit). `vercel.json` serves
+  `sw.js`/manifest with no-cache so updates roll out immediately.
+- Fan-out trigger: the **sender's client** calls the `send-push` edge function right after the
+  message insert confirms (`useConversations.sendMessage`, fire-and-forget) — no DB webhook or
+  pg_net dependency, and a push failure can never fail the send. Guardrails: only the message's
+  author may fan it out, and only within 5 minutes of creation (no replaying old history).
+  Accepted gap: sender killing the tab in the instant between insert and invoke loses that push.
+- Recipients mirror conversation RLS visibility (DM: other party; PROJECT/MILESTONE: members +
+  managers; TASK: members + assignee + managers), minus the author.
+- `push_subscriptions`: one row per device; inserts only via `save_push_subscription`
+  (SECURITY DEFINER) which re-homes an endpoint to the calling account — shared devices without
+  clean logout can't leak the previous user's messages. SELECT/DELETE own via RLS. Endpoints the
+  push service reports dead (404/410) are deleted by the edge function — the table self-heals.
+  Sign-out also unsubscribes the device (best-effort, in `AuthContext.signOut`).
+- VAPID keys: private half lives in Supabase Vault (secret `vapid_keys`, readable only through
+  service-role-only `get_vapid_keys()`; never in git). Public half is hardcoded in
+  `src/lib/push.ts` (it's not a secret). Rotating the pair = update both + devices resubscribe.
+- Notification UX: WhatsApp-style copy (DM → author as title; channels → "Thread · Project" +
+  "Author: text"), `tag = conversation_id` collapses stacked notifications per thread, tap
+  deep-links into the conversation (`?c=<id>` cold start, SW `postMessage` when already open),
+  suppressed while the app is focused (realtime already renders it). Badging API mirrors the
+  unread total on the installed app icon.
+- iOS: Web Push only exists for *installed* PWAs (16.4+), so the enable-banner shows an
+  Add-to-Home-Screen hint on Safari-in-tab instead of a permission prompt.
+- Verified 2026-07-09 (machine, via public APIs only): build clean; engineer demo registered a
+  synthetic subscription through the RPC; manager demo sent a message and invoked `send-push` →
+  HTTP 200 `{removed:1}` on a dead Mozilla endpoint, proving Vault key import, payload
+  encryption, delivery attempt, and pruning; 401/403/404 negatives verified 2026-07-08.
+  NOT machine-verified: a real device receiving/tapping a notification — owner should test on a
+  phone against the deployed HTTPS URL (service workers require HTTPS; localhost also works).
+
 ## Open questions
 - (none currently)
 

@@ -1,9 +1,22 @@
-import { User, Settings, Shield, Bell, LogOut } from 'lucide-react';
+import { User, Settings, Shield, Bell, BellOff, LogOut, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export function AccountView() {
   const { user, profile, signOut } = useAuth();
+  const push = usePushNotifications();
+
+  const pushStatus = push.needsInstall
+    ? 'Add Tavron to your Home Screen to enable push'
+    : !push.supported
+      ? 'Not supported in this browser'
+      : push.permission === 'denied'
+        ? 'Blocked — allow notifications in browser settings'
+        : push.subscribed
+          ? 'On for this device'
+          : 'Off for this device';
+  const canToggle = push.supported && push.permission !== 'denied';
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3 sm:px-8 py-4 sm:py-8 animate-in fade-in duration-500">
@@ -58,17 +71,26 @@ export function AccountView() {
                 </div>
               </button>
 
-              <button className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
+              <div className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:bg-white dark:group-hover:bg-gray-950 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                    <Bell className="w-5 h-5" />
+                    {push.subscribed ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Notifications</p>
-                    <p className="text-xs text-gray-500">Email, push, and in-app alerts</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Push Notifications</p>
+                    <p className="text-xs text-gray-500">{pushStatus}</p>
                   </div>
                 </div>
-              </button>
+                {canToggle && (
+                  <button
+                    onClick={() => void (push.subscribed ? push.disable() : push.enable())}
+                    disabled={push.busy}
+                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white transition-colors disabled:opacity-50"
+                  >
+                    {push.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : push.subscribed ? 'Turn off' : 'Turn on'}
+                  </button>
+                )}
+              </div>
 
               <button className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group">
                 <div className="flex items-center gap-3">

@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
+import { registerServiceWorker } from './lib/push';
+
+registerServiceWorker();
 
 window.addEventListener('error', (event) => {
   if (event.message === 'Script error.' || event.message === 'Script error' || (event.message && event.message.toString().includes('Script error')) || event.message.includes('ResizeObserver')) {

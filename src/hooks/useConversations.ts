@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { conversations as conversationsApi, realtime as realtimeApi } from '@/lib/api';
+import { conversations as conversationsApi, push as pushApi, realtime as realtimeApi } from '@/lib/api';
+import { setAppBadge } from '@/lib/push';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ChatMessage, InboxItem, MessageQuote } from '@/types';
 
@@ -119,6 +120,8 @@ export function useConversations() {
           prev.filter((m) => m.id !== saved.id).map((m) => (m.id === tempId ? saved : m))
         );
         bumpInboxPreview(saved, false);
+        // Notify recipients' devices; never let a push problem fail the send.
+        void pushApi.fanoutMessage(saved.id);
       } catch {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m))
@@ -197,6 +200,11 @@ export function useConversations() {
   }, [profile, refreshInbox, bumpInboxPreview]);
 
   const unreadTotal = inbox.reduce((sum, i) => sum + i.unreadCount, 0);
+
+  // Mirror the unread total onto the installed app's icon (Badging API).
+  useEffect(() => {
+    setAppBadge(unreadTotal);
+  }, [unreadTotal]);
 
   return {
     inbox,
