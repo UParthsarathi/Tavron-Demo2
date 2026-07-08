@@ -9,3 +9,4 @@ export * as tasks from './tasks';
 export * as documents from './documents';
 export * as dailyLogs from './dailyLogs';
 export * as storage from './storage';
+export * as realtime from './realtime';

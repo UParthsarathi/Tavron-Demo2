@@ -5,6 +5,7 @@ import {
   milestones as milestonesApi,
   profiles as profilesApi,
   projects as projectsApi,
+  realtime as realtimeApi,
   tasks as tasksApi,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,6 +72,24 @@ export function useProjects() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [refetch, showNotice]);
+
+  // Realtime: changes made by other clients trigger a refetch, so chat
+  // messages and status updates appear without a manual refresh. Debounced so
+  // a burst of events causes a single refetch.
+  useEffect(() => {
+    if (!profile) return;
+    let timer: number | null = null;
+    const unsubscribe = realtimeApi.subscribeToChanges(() => {
+      if (timer) clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        refetch().catch(() => { /* transient failure; next event retries */ });
+      }, 300);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [profile, refetch]);
 
   /** Wraps a mutation: run, refetch, toast — errors become error toasts. */
   const run = useCallback(
