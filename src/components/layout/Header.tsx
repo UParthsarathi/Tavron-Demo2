@@ -17,9 +17,11 @@ export type AppView =
 export interface HeaderProps {
   currentView?: AppView;
   onViewChange?: (view: AppView) => void;
+  /** Unread message count shown on the Comm tab. */
+  messagesBadge?: number;
 }
 
-export function Header({ currentView = 'projects', onViewChange }: HeaderProps) {
+export function Header({ currentView = 'projects', onViewChange, messagesBadge = 0 }: HeaderProps) {
   const { profile, role } = useAuth();
   const username = profile?.name || profile?.email?.split('@')[0] || 'User';
 
@@ -48,7 +50,7 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
     }
   }, [isDark]);
 
-  const navButton = (view: AppView, label: string, icon: React.ReactNode) => (
+  const navButton = (view: AppView, label: string, icon: React.ReactNode, badge = 0) => (
     <button
       onClick={() => onViewChange?.(view)}
       className={cn(
@@ -60,6 +62,11 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
     >
       {icon}
       {label}
+      {badge > 0 && (
+        <span className="min-w-[1.1rem] h-4 px-1 rounded-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[10px] font-bold flex items-center justify-center">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 
@@ -80,7 +87,7 @@ export function Header({ currentView = 'projects', onViewChange }: HeaderProps) 
             {role === 'MANAGER' && navButton('actions', 'Quick Actions', <Zap className="w-4 h-4" />)}
             {role === 'ENGINEER' && navButton('tasks', 'My Tasks', <SquareCheck className="w-4 h-4" />)}
             {navButton('logs', 'Daily Logs', <NotebookPen className="w-4 h-4" />)}
-            {navButton('messages', 'Comm', <MessageSquare className="w-4 h-4" />)}
+            {navButton('messages', 'Comm', <MessageSquare className="w-4 h-4" />, messagesBadge)}
           </nav>
         )}
       </div>

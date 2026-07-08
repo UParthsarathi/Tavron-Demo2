@@ -19,6 +19,111 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversation_reads: {
+        Row: {
+          conversation_id: string
+          last_read_at: string
+          profile_id: string
+        }
+        Insert: {
+          conversation_id: string
+          last_read_at?: string
+          profile_id: string
+        }
+        Update: {
+          conversation_id?: string
+          last_read_at?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_reads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          dm_a: string | null
+          dm_b: string | null
+          id: string
+          last_message_at: string | null
+          milestone_id: string | null
+          project_id: string | null
+          task_id: string | null
+          type: Database["public"]["Enums"]["conversation_type"]
+        }
+        Insert: {
+          created_at?: string
+          dm_a?: string | null
+          dm_b?: string | null
+          id?: string
+          last_message_at?: string | null
+          milestone_id?: string | null
+          project_id?: string | null
+          task_id?: string | null
+          type: Database["public"]["Enums"]["conversation_type"]
+        }
+        Update: {
+          created_at?: string
+          dm_a?: string | null
+          dm_b?: string | null
+          id?: string
+          last_message_at?: string | null
+          milestone_id?: string | null
+          project_id?: string | null
+          task_id?: string | null
+          type?: Database["public"]["Enums"]["conversation_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_dm_a_fkey"
+            columns: ["dm_a"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_dm_b_fkey"
+            columns: ["dm_b"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: true
+            referencedRelation: "milestones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: true
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_logs: {
         Row: {
           author_id: string
@@ -115,6 +220,58 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          author_id: string
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          image_path: string | null
+          reply_to: string | null
+        }
+        Insert: {
+          author_id: string
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          reply_to?: string | null
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          reply_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
@@ -258,48 +415,6 @@ export type Database = {
           },
         ]
       }
-      task_comments: {
-        Row: {
-          author_id: string
-          content: string
-          created_at: string
-          id: string
-          image_path: string | null
-          task_id: string
-        }
-        Insert: {
-          author_id: string
-          content?: string
-          created_at?: string
-          id?: string
-          image_path?: string | null
-          task_id: string
-        }
-        Update: {
-          author_id?: string
-          content?: string
-          created_at?: string
-          id?: string
-          image_path?: string | null
-          task_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "task_comments_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_comments_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tasks: {
         Row: {
           assignee_id: string
@@ -357,9 +472,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_conversation: {
+        Args: { _conversation_id: string; _uid?: string }
+        Returns: boolean
+      }
       can_view_task: {
         Args: { _task_id: string; _uid?: string }
         Returns: boolean
+      }
+      fetch_inbox: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          dm_partner_id: string
+          dm_partner_name: string
+          last_author_id: string
+          last_author_name: string
+          last_content: string
+          last_has_image: boolean
+          last_message_at: string
+          milestone_id: string
+          milestone_title: string
+          project_id: string
+          project_name: string
+          task_id: string
+          task_status: Database["public"]["Enums"]["task_status"]
+          task_title: string
+          type: Database["public"]["Enums"]["conversation_type"]
+          unread_count: number
+        }[]
       }
       is_manager: { Args: { _uid?: string }; Returns: boolean }
       is_project_member: {
@@ -369,6 +510,7 @@ export type Database = {
     }
     Enums: {
       app_role: "MANAGER" | "ENGINEER"
+      conversation_type: "TASK" | "MILESTONE" | "PROJECT" | "DM"
       document_type: "LINK" | "DOCUMENT"
       milestone_status: "PENDING" | "IN_PROGRESS" | "COMPLETED"
       project_status: "ACTIVE" | "ON_HOLD" | "COMPLETED"
@@ -501,6 +643,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["MANAGER", "ENGINEER"],
+      conversation_type: ["TASK", "MILESTONE", "PROJECT", "DM"],
       document_type: ["LINK", "DOCUMENT"],
       milestone_status: ["PENDING", "IN_PROGRESS", "COMPLETED"],
       project_status: ["ACTIVE", "ON_HOLD", "COMPLETED"],

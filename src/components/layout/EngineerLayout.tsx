@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { Header, type AppView } from '@/components/layout/Header';
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
 import { AccountView } from '@/components/account/AccountView';
-import { MessagesView } from '@/components/messages/MessagesView';
+import { MessagesView, type ChatTarget } from '@/components/messages/MessagesView';
 import { ProjectList } from '@/components/projects/ProjectList';
 import { ProjectDetails } from '@/components/projects/ProjectDetails';
 import { TasksView } from '@/components/tasks/TasksView';
 import { DailyLogsView } from '@/components/logs/DailyLogsView';
 import { useProjects } from '@/hooks/useProjects';
+import { useConversations } from '@/hooks/useConversations';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -21,15 +22,16 @@ export function EngineerLayout() {
     loading,
     notice,
     updateTaskStatus,
-    addTaskComment,
     addDailyLog,
     updateDailyLog,
     deleteDailyLog,
   } = useProjects();
 
+  const chat = useConversations();
+
   const [currentView, setCurrentView] = useState<AppView>('projects');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [chatTarget, setChatTarget] = useState<ChatTarget | null>(null);
 
   const selectedProject = selectedProjectId
     ? projects.find(p => p.id === selectedProjectId)
@@ -41,12 +43,12 @@ export function EngineerLayout() {
       setSelectedProjectId(null);
     }
     if (view !== 'messages') {
-      setSelectedChatId(null);
+      setChatTarget(null);
     }
   };
 
-  const discussTask = (taskId: string) => {
-    setSelectedChatId(`task-${taskId}`);
+  const openChat = (target: ChatTarget) => {
+    setChatTarget(target);
     setCurrentView('messages');
   };
 
@@ -57,7 +59,7 @@ export function EngineerLayout() {
       <div className="fixed inset-0 z-0 pointer-events-none bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px] opacity-60"></div>
 
       <div className="relative z-10 flex-1 flex flex-col">
-        <Header currentView={currentView} onViewChange={changeView} />
+        <Header currentView={currentView} onViewChange={changeView} messagesBadge={chat.unreadTotal} />
 
         <main className="w-full relative pb-20 sm:pb-8 flex-1">
         {loading ? (
@@ -65,12 +67,7 @@ export function EngineerLayout() {
             <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
           </div>
         ) : currentView === 'messages' ? (
-          <MessagesView
-            projects={projects}
-            standaloneTasks={standaloneTasks}
-            initialChatId={selectedChatId}
-            onAddTaskComment={addTaskComment}
-          />
+          <MessagesView chat={chat} initialTarget={chatTarget} />
         ) : currentView === 'account' ? (
           <AccountView />
         ) : currentView === 'tasks' ? (
@@ -81,7 +78,7 @@ export function EngineerLayout() {
             onAddTask={noop}
             onUpdateTaskStatus={updateTaskStatus}
             onDeleteTask={noop}
-            onDiscussTask={discussTask}
+            onDiscussTask={(taskId) => openChat({ kind: 'task', id: taskId })}
           />
         ) : currentView === 'logs' ? (
           <DailyLogsView
@@ -108,8 +105,9 @@ export function EngineerLayout() {
             onAddTask={noop}
             onUpdateTaskStatus={updateTaskStatus}
             onDeleteTask={noop}
-            onAddTaskComment={addTaskComment}
-            onDiscussTask={discussTask}
+            onDiscussTask={(taskId) => openChat({ kind: 'task', id: taskId })}
+            onDiscussMilestone={(milestoneId) => openChat({ kind: 'milestone', id: milestoneId })}
+            onOpenProjectChat={(projectId) => openChat({ kind: 'project', id: projectId })}
             readOnly={true}
           />
         ) : (
@@ -121,7 +119,7 @@ export function EngineerLayout() {
         )}
         </main>
       </div>
-      <MobileBottomNav currentView={currentView} onViewChange={changeView} />
+      <MobileBottomNav currentView={currentView} onViewChange={changeView} messagesBadge={chat.unreadTotal} />
 
       <AnimatePresence>
         {notice && (

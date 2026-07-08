@@ -8,10 +8,11 @@ import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
 import { QuickActionsView } from '@/components/actions/QuickActionsView';
 import { AddEngineerView } from '@/components/actions/AddEngineerView';
 import { AccountView } from '@/components/account/AccountView';
-import { MessagesView } from '@/components/messages/MessagesView';
+import { MessagesView, type ChatTarget } from '@/components/messages/MessagesView';
 import { TasksView } from '@/components/tasks/TasksView';
 import { DailyLogsView } from '@/components/logs/DailyLogsView';
 import { useProjects } from '@/hooks/useProjects';
+import { useConversations } from '@/hooks/useConversations';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -37,16 +38,17 @@ export function ManagerLayout() {
     addTask,
     updateTaskStatus,
     deleteTask,
-    addTaskComment,
     addDailyLog,
     updateDailyLog,
     deleteDailyLog,
   } = useProjects();
 
+  const chat = useConversations();
+
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>('projects');
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [chatTarget, setChatTarget] = useState<ChatTarget | null>(null);
 
   const selectedProject = selectedProjectId
     ? projects.find(p => p.id === selectedProjectId)
@@ -58,12 +60,12 @@ export function ManagerLayout() {
       setSelectedProjectId(null);
     }
     if (view !== 'messages') {
-      setSelectedChatId(null);
+      setChatTarget(null);
     }
   };
 
-  const discussTask = (taskId: string) => {
-    setSelectedChatId(`task-${taskId}`);
+  const openChat = (target: ChatTarget) => {
+    setChatTarget(target);
     setCurrentView('messages');
   };
 
@@ -73,7 +75,7 @@ export function ManagerLayout() {
       <div className="fixed inset-0 z-0 pointer-events-none bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] dark:bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:24px_24px] opacity-60"></div>
 
       <div className="relative z-10 flex-1 flex flex-col">
-        <Header currentView={currentView} onViewChange={changeView} />
+        <Header currentView={currentView} onViewChange={changeView} messagesBadge={chat.unreadTotal} />
 
         <main className="w-full relative pb-20 sm:pb-8 flex-1">
         {loading ? (
@@ -81,12 +83,7 @@ export function ManagerLayout() {
             <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
           </div>
         ) : currentView === 'messages' ? (
-          <MessagesView
-            projects={projects}
-            standaloneTasks={standaloneTasks}
-            initialChatId={selectedChatId}
-            onAddTaskComment={addTaskComment}
-          />
+          <MessagesView chat={chat} initialTarget={chatTarget} />
         ) : currentView === 'add_engineer' ? (
           <AddEngineerView onBack={() => setCurrentView('actions')} />
         ) : currentView === 'account' ? (
@@ -99,7 +96,7 @@ export function ManagerLayout() {
             onAddTask={addTask}
             onUpdateTaskStatus={updateTaskStatus}
             onDeleteTask={deleteTask}
-            onDiscussTask={discussTask}
+            onDiscussTask={(taskId) => openChat({ kind: 'task', id: taskId })}
           />
         ) : currentView === 'logs' ? (
           <DailyLogsView
@@ -113,7 +110,7 @@ export function ManagerLayout() {
           <QuickActionsView onActionClick={(action) => {
             if (action === 'Task Discussions') {
               setCurrentView('messages');
-              setSelectedChatId(null);
+              setChatTarget(null);
             } else if (action === 'Delegate Work') {
               setCurrentView('delegate');
             } else if (action === 'Add Engineer') {
@@ -144,8 +141,9 @@ export function ManagerLayout() {
             onAddTask={addTask}
             onUpdateTaskStatus={updateTaskStatus}
             onDeleteTask={deleteTask}
-            onAddTaskComment={addTaskComment}
-            onDiscussTask={discussTask}
+            onDiscussTask={(taskId) => openChat({ kind: 'task', id: taskId })}
+            onDiscussMilestone={(milestoneId) => openChat({ kind: 'milestone', id: milestoneId })}
+            onOpenProjectChat={(projectId) => openChat({ kind: 'project', id: projectId })}
           />
         ) : (
           <ProjectList
@@ -168,7 +166,7 @@ export function ManagerLayout() {
         }}
       />
 
-      <MobileBottomNav currentView={currentView} onViewChange={changeView} />
+      <MobileBottomNav currentView={currentView} onViewChange={changeView} messagesBadge={chat.unreadTotal} />
 
       <AnimatePresence>
         {notice && (

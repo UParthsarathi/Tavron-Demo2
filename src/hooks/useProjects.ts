@@ -16,57 +16,8 @@ import {
   MilestoneStatus,
   Project,
   ProjectStatus,
-  TaskComment,
   TaskStatus,
 } from '@/types';
-
-/**
- * Upserts one comment into a task list. Removes any entry matching the new
- * comment's id or `replaceId` (the optimistic placeholder), then appends —
- * so it is safe regardless of whether the server confirm or the realtime
- * event lands first. Returns the input array untouched if the task isn't here.
- */
-function upsertComment(
-  tasks: EngineerTask[],
-  taskId: string,
-  comment: TaskComment,
-  replaceId?: string
-): EngineerTask[] {
-  const idx = tasks.findIndex((t) => t.id === taskId);
-  if (idx === -1) return tasks;
-  const existing = tasks[idx].comments ?? [];
-  const comments = existing
-    .filter((c) => c.id !== comment.id && c.id !== replaceId)
-    .concat(comment)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const next = [...tasks];
-  next[idx] = { ...tasks[idx], comments };
-  return next;
-}
-
-function dropComment(tasks: EngineerTask[], taskId: string, commentId: string): EngineerTask[] {
-  const idx = tasks.findIndex((t) => t.id === taskId);
-  if (idx === -1) return tasks;
-  const next = [...tasks];
-  next[idx] = { ...tasks[idx], comments: (tasks[idx].comments ?? []).filter((c) => c.id !== commentId) };
-  return next;
-}
-
-function upsertInProjects(
-  projects: Project[],
-  taskId: string,
-  comment: TaskComment,
-  replaceId?: string
-): Project[] {
-  let changed = false;
-  const next = projects.map((p) => {
-    const tasks = upsertComment(p.tasks, taskId, comment, replaceId);
-    if (tasks === p.tasks) return p;
-    changed = true;
-    return { ...p, tasks };
-  });
-  return changed ? next : projects;
-}
 
 export interface Notice {
   type: 'success' | 'error';
@@ -100,10 +51,6 @@ export function useProjects() {
     noticeTimeoutRef.current = window.setTimeout(() => setNotice(null), 5000);
   }, []);
 
-  // Optimistic comments not yet confirmed by the server. refetch() re-applies
-  // them so a background refresh can't make an in-flight message vanish.
-  const pendingCommentsRef = useRef(new Map<string, { taskId: string; comment: TaskComment }>());
-
   const refetch = useCallback(async () => {
     const [projectList, engineerList, standaloneList, logList] = await Promise.all([
       projectsApi.fetchProjects(),
@@ -111,36 +58,10 @@ export function useProjects() {
       tasksApi.fetchStandaloneTasks(),
       dailyLogsApi.fetchDailyLogs(),
     ]);
-    let nextProjects = projectList;
-    let nextStandalone = standaloneList;
-    for (const { taskId, comment } of pendingCommentsRef.current.values()) {
-      nextProjects = upsertInProjects(nextProjects, taskId, comment);
-      nextStandalone = upsertComment(nextStandalone, taskId, comment);
-    }
-    setProjects(nextProjects);
+    setProjects(projectList);
     setEngineers(engineerList);
-    setStandaloneTasks(nextStandalone);
+    setStandaloneTasks(standaloneList);
     setLogs(logList);
-  }, []);
-
-  /** Upserts a comment into whichever list holds its task (project or standalone). */
-  const applyComment = useCallback((taskId: string, comment: TaskComment, replaceId?: string) => {
-    setProjects((prev) => upsertInProjects(prev, taskId, comment, replaceId));
-    setStandaloneTasks((prev) => upsertComment(prev, taskId, comment, replaceId));
-  }, []);
-
-  const removeComment = useCallback((taskId: string, commentId: string) => {
-    setProjects((prev) => {
-      let changed = false;
-      const next = prev.map((p) => {
-        const tasks = dropComment(p.tasks, taskId, commentId);
-        if (tasks === p.tasks) return p;
-        changed = true;
-        return { ...p, tasks };
-      });
-      return changed ? next : prev;
-    });
-    setStandaloneTasks((prev) => dropComment(prev, taskId, commentId));
   }, []);
 
   useEffect(() => {
@@ -152,35 +73,22 @@ export function useProjects() {
     return () => { cancelled = true; };
   }, [refetch, showNotice]);
 
-  // Incoming chat message: fetch that one row (author join + signed image,
-  // under our own RLS) and patch it in — no full refetch. ~200ms vs ~1s.
-  const handleCommentInsert = useCallback((row: { id: string; task_id: string }) => {
-    void tasksApi.fetchTaskComment(row.id).then((res) => {
-      if (res) applyComment(res.taskId, res.comment);
-    });
-  }, [applyComment]);
-
-  // Realtime: chat messages take the patch lane above; everything else
-  // triggers a debounced full refetch. The debounce is 1s because every
-  // comment also bumps its project's updated_at (touch trigger), and a chat
-  // burst shouldn't turn into a refetch storm.
+  // Realtime: structural changes made by other clients trigger a refetch.
+  // Chat traffic never lands here (see realtime.ts); useConversations owns it.
   useEffect(() => {
     if (!profile) return;
     let timer: number | null = null;
-    const unsubscribe = realtimeApi.subscribeToChanges({
-      onCommentInsert: handleCommentInsert,
-      onOtherChange: () => {
-        if (timer) clearTimeout(timer);
-        timer = window.setTimeout(() => {
-          refetch().catch(() => { /* transient failure; next event retries */ });
-        }, 1000);
-      },
+    const unsubscribe = realtimeApi.subscribeToChanges(() => {
+      if (timer) clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        refetch().catch(() => { /* transient failure; next event retries */ });
+      }, 300);
     });
     return () => {
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
-  }, [profile, refetch, handleCommentInsert]);
+  }, [profile, refetch]);
 
   /** Wraps a mutation: run, refetch, toast — errors become error toasts. */
   const run = useCallback(
@@ -275,41 +183,6 @@ export function useProjects() {
   const deleteTask = useCallback((_projectId: string | null, taskId: string) =>
     run('Deleted task', () => tasksApi.deleteTask(taskId)), [run]);
 
-  // Optimistic send: the message renders instantly, then the confirmed row
-  // (real id, signed image URL) replaces it. On failure it is removed with an
-  // error toast. No full refetch on the send path.
-  const addTaskComment = useCallback(
-    async (taskId: string, data: { content: string; imageFile?: File | null }): Promise<boolean> => {
-      if (!profile) return false;
-      const tempId = `pending-${crypto.randomUUID()}`;
-      const previewUrl = data.imageFile ? URL.createObjectURL(data.imageFile) : undefined;
-      const optimistic: TaskComment = {
-        id: tempId,
-        authorId: profile.id,
-        authorName: profile.name,
-        authorRole: profile.role,
-        content: data.content,
-        createdAt: new Date().toISOString(),
-        imageUrl: previewUrl,
-      };
-      pendingCommentsRef.current.set(tempId, { taskId, comment: optimistic });
-      applyComment(taskId, optimistic);
-      try {
-        const saved = await tasksApi.addTaskComment({ taskId, authorId: profile.id, ...data });
-        applyComment(taskId, saved, tempId);
-        return true;
-      } catch (e) {
-        removeComment(taskId, tempId);
-        showNotice({ type: 'error', label: e instanceof Error ? e.message : 'Failed to send message' });
-        return false;
-      } finally {
-        pendingCommentsRef.current.delete(tempId);
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-      }
-    },
-    [profile, applyComment, removeComment, showNotice]
-  );
-
   // ---- daily logs ----------------------------------------------------------
   const addDailyLog = useCallback(
     (data: { content: string; projectId?: string | null }) =>
@@ -345,7 +218,6 @@ export function useProjects() {
     addTask,
     updateTaskStatus,
     deleteTask,
-    addTaskComment,
     addDailyLog,
     updateDailyLog,
     deleteDailyLog,

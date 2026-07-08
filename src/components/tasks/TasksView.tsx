@@ -153,7 +153,7 @@ export function TasksView({
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  {t.comments?.length ? `${t.comments.length} Messages` : 'Discuss'}
+                  Discuss
                 </button>
                 <select
                   value={t.status}

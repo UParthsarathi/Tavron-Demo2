@@ -7,14 +7,16 @@ import type { AppView } from './Header';
 export interface MobileBottomNavProps {
   currentView?: AppView;
   onViewChange?: (view: AppView) => void;
+  /** Unread message count shown on the Comm tab. */
+  messagesBadge?: number;
 }
 
-export function MobileBottomNav({ currentView = 'projects', onViewChange }: MobileBottomNavProps) {
+export function MobileBottomNav({ currentView = 'projects', onViewChange, messagesBadge = 0 }: MobileBottomNavProps) {
   const { role } = useAuth();
 
   if (!onViewChange) return null;
 
-  const navButton = (view: AppView, label: string, icon: React.ReactNode) => (
+  const navButton = (view: AppView, label: string, icon: React.ReactNode, badge = 0) => (
     <button
       onClick={() => onViewChange(view)}
       className={cn(
@@ -25,10 +27,15 @@ export function MobileBottomNav({ currentView = 'projects', onViewChange }: Mobi
       )}
     >
       <div className={cn(
-        "p-1 rounded-full transition-colors",
+        "relative p-1 rounded-full transition-colors",
         currentView === view ? "bg-gray-100 dark:bg-gray-800" : "bg-transparent"
       )}>
         {icon}
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 min-w-[1rem] h-4 px-1 rounded-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[9px] font-bold flex items-center justify-center">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
       </div>
       <span className="text-[10px] font-medium">{label}</span>
     </button>
@@ -41,7 +48,7 @@ export function MobileBottomNav({ currentView = 'projects', onViewChange }: Mobi
         {role === 'MANAGER' && navButton('dashboard', 'Dashboard', <LayoutDashboard className="w-4 h-4" />)}
         {role === 'ENGINEER' && navButton('tasks', 'Tasks', <SquareCheck className="w-4 h-4" />)}
         {navButton('logs', 'Logs', <NotebookPen className="w-4 h-4" />)}
-        {navButton('messages', 'Comm', <MessageSquare className="w-4 h-4" />)}
+        {navButton('messages', 'Comm', <MessageSquare className="w-4 h-4" />, messagesBadge)}
         {role === 'MANAGER' && navButton('actions', 'Actions', <Zap className="w-4 h-4" />)}
       </nav>
     </div>

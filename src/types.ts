@@ -44,16 +44,6 @@ export interface ProjectDoc {
 
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
-export interface TaskComment {
-  id: string;
-  authorId: string;
-  authorRole: 'MANAGER' | 'ENGINEER';
-  authorName: string;
-  content: string;
-  createdAt: string;
-  imageUrl?: string; // signed URL, resolved by the api layer
-}
-
 export interface EngineerTask {
   id: string;
   title: string;
@@ -61,8 +51,58 @@ export interface EngineerTask {
   projectId: string | null; // null = standalone task ("Delegate Work")
   projectName?: string;
   status: TaskStatus;
-  comments?: TaskComment[];
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Messaging. Every conversation is attached to something: a task, a milestone,
+// a project as a whole ("General"), or a person (1:1 DM). One model for all
+// four — see DECISIONS.md ("Messages inbox redesign").
+// ---------------------------------------------------------------------------
+
+export type ConversationType = 'TASK' | 'MILESTONE' | 'PROJECT' | 'DM';
+
+/** The message being replied to, denormalized for rendering the quote block. */
+export interface MessageQuote {
+  id: string;
+  authorName: string;
+  content: string;
+  hasImage: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: UserRole;
+  content: string;
+  createdAt: string;
+  imageUrl?: string; // signed URL, resolved by the api layer
+  quote?: MessageQuote;
+  pending?: boolean; // optimistic send awaiting server confirm
+  failed?: boolean; // send failed; kept in the UI so the text isn't lost
+}
+
+/** One sidebar row: a conversation plus everything needed to render it. */
+export interface InboxItem {
+  conversationId: string;
+  type: ConversationType;
+  title: string; // task/milestone title, "General", or DM partner name
+  projectId: string | null;
+  projectName: string | null;
+  taskId: string | null;
+  taskStatus: TaskStatus | null;
+  milestoneId: string | null;
+  dmPartnerId: string | null;
+  lastMessageAt: string | null; // null = no messages yet
+  lastMessage: {
+    authorId: string;
+    authorName: string;
+    content: string;
+    hasImage: boolean;
+  } | null;
+  unreadCount: number;
 }
 
 export interface Project {

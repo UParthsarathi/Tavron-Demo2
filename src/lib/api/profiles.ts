@@ -40,6 +40,16 @@ export async function fetchEngineers(): Promise<Engineer[]> {
   return data.map(mapProfileToEngineer);
 }
 
+/** Everyone on the team (managers + engineers) — used by the new-DM picker. */
+export async function fetchTeam(): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('name');
+  if (error) throw new Error(`Failed to load team: ${error.message}`);
+  return data.map(mapProfile);
+}
+
 export async function fetchMyProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')

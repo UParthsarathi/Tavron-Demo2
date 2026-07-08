@@ -102,31 +102,8 @@ export function downloadProjectSummary(project: Project) {
       yPos += lineHeight;
       doc.text(`Created: ${new Date(t.createdAt).toLocaleDateString()}`, margin + 10, yPos);
       yPos += lineHeight;
-
-      if (t.comments && t.comments.length > 0) {
-        checkPageBreak(lineHeight * 2);
-        doc.setFontSize(11);
-        doc.setFont("helvetica", "italic");
-        doc.text("Discussion:", margin + 10, yPos);
-        yPos += lineHeight;
-
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        t.comments.forEach(c => {
-          const authorText = `${c.authorName} (${new Date(c.createdAt).toLocaleString()}):`;
-          const contentLines = doc.splitTextToSize(c.content, contentWidth - 25);
-          
-          checkPageBreak(lineHeight * (contentLines.length + 1));
-          
-          doc.setFont("helvetica", "bold");
-          doc.text(authorText, margin + 15, yPos);
-          yPos += lineHeight;
-          
-          doc.setFont("helvetica", "normal");
-          doc.text(contentLines, margin + 15, yPos);
-          yPos += lineHeight * contentLines.length;
-        });
-      }
+      // Task discussions moved to the conversations model; the PDF sticks to
+      // the work-item facts and leaves chat history to the Messages view.
       yPos += lineHeight;
     });
   }
