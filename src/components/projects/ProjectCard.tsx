@@ -24,34 +24,20 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
     >
       <div className="flex justify-between items-start mb-6">
         <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 tracking-tight pr-4">{project.name}</h3>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {project.status === 'ACTIVE' && (
-            <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md border border-gray-200/50 dark:border-gray-700/50">
-              ACTIVE
-            </span>
-          )}
-          {project.status === 'COMPLETED' && (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  downloadProjectSummary(project);
-                }}
-                className="p-1 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm flex items-center justify-center"
-                title="Download Project Summary"
-              >
-                <FileText className="w-3.5 h-3.5" />
-              </button>
-              <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md border border-gray-200/50 dark:border-gray-700/50">
-                COMPLETED
-              </span>
-            </div>
-          )}
-          {project.status === 'ON_HOLD' && (
-            <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md border border-gray-200/50 dark:border-gray-700/50">
-              ON HOLD
-            </span>
-          )}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              void downloadProjectSummary(project);
+            }}
+            className="p-1 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm flex items-center justify-center"
+            title="Download project report (status + full discussion)"
+          >
+            <FileText className="w-3.5 h-3.5" />
+          </button>
+          <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md border border-gray-200/50 dark:border-gray-700/50">
+            {project.status === 'ON_HOLD' ? 'ON HOLD' : project.status}
+          </span>
         </div>
       </div>
 
