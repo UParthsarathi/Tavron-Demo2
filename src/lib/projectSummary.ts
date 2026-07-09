@@ -1,9 +1,12 @@
 // Client-side project status report (PDF). Built with jsPDF primitives —
-// header band, stat boxes, progress bar, and page-break-aware tables with
-// repeated headers — so the "Download Project Summary" button on a project
-// card produces something a manager can actually forward to a client.
+// header band, stat boxes, progress bar, page-break-aware tables, and the
+// project's full discussion history (general channel + task/milestone
+// threads, fetched through the api layer under the caller's visibility) —
+// so the "Download Project Summary" button on a project card produces
+// something a manager can actually forward to a client.
 
-import { Project } from '@/types';
+import { conversations as conversationsApi } from '@/lib/api';
+import { ChatMessage, InboxItem, Project } from '@/types';
 import jsPDF from 'jspdf';
 
 // ---------------------------------------------------------------------------
@@ -36,7 +39,35 @@ function daysOverdue(isoDate: string): number {
 
 type Col = { header: string; width: number | 'flex'; color?: (row: string[]) => [number, number, number] | null };
 
-export function downloadProjectSummary(project: Project) {
+type ChatThread = { item: InboxItem; messages: ChatMessage[] };
+
+function threadLabel(item: InboxItem): string {
+  switch (item.type) {
+    case 'PROJECT': return 'General — project channel';
+    case 'MILESTONE': return `Milestone · ${item.title}`;
+    default: return `Task · ${item.title}`;
+  }
+}
+
+/** Every non-empty conversation attached to the project, General first. */
+async function collectProjectChat(projectId: string): Promise<ChatThread[]> {
+  const inbox = await conversationsApi.fetchInbox();
+  const order = { PROJECT: 0, MILESTONE: 1, TASK: 2, DM: 3 } as const;
+  const items = inbox
+    .filter((i) => i.projectId === projectId && i.lastMessageAt)
+    .sort((a, b) => order[a.type] - order[b.type] || a.title.localeCompare(b.title));
+  const threads: ChatThread[] = [];
+  for (const item of items) {
+    const messages = await conversationsApi.fetchMessages(item.conversationId);
+    if (messages.length > 0) threads.push({ item, messages });
+  }
+  return threads;
+}
+
+export async function downloadProjectSummary(project: Project) {
+  // Fetch the discussion up front; a chat hiccup must not block the report.
+  const chat = await collectProjectChat(project.id).catch((): ChatThread[] | null => null);
+
   const doc = new jsPDF(); // A4 portrait, mm
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -296,6 +327,84 @@ export function downloadProjectSummary(project: Project) {
       ],
       project.docs.map((d) => [d.title, d.type === 'LINK' ? 'Link' : 'File', fmtDate(d.dateAdded)])
     );
+  }
+
+  // ---- discussion history ------------------------------------------------------
+  const totalMessages = (chat ?? []).reduce((s, t) => s + t.messages.length, 0);
+  sectionTitle(`Project Discussion (${totalMessages} message${totalMessages === 1 ? '' : 's'})`);
+  if (chat === null) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text('Messages could not be loaded for this report.', M, y, { baseline: 'top' });
+    y += 8;
+  } else if (chat.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text('No messages yet.', M, y, { baseline: 'top' });
+    y += 8;
+  } else {
+    const fmtTime = (iso: string) =>
+      new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+    for (const thread of chat) {
+      ensureSpace(18);
+      doc.setFillColor(...PANEL);
+      doc.rect(M, y, contentW, 6.5, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...INK);
+      doc.text(threadLabel(thread.item), M + 2, y + 2, { baseline: 'top' });
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...MUTED);
+      doc.text(`${thread.messages.length} message${thread.messages.length === 1 ? '' : 's'}`, M + contentW - 2, y + 2, {
+        align: 'right', baseline: 'top',
+      });
+      y += 9;
+
+      for (const msg of thread.messages) {
+        const bodyLines: string[] = doc.splitTextToSize(msg.content, contentW - 8);
+        const quoteLines: string[] = msg.quote
+          ? doc.splitTextToSize(`↪ ${msg.quote.authorName}: ${msg.quote.content}`, contentW - 12)
+          : [];
+        const extra = (msg.imageUrl ? 3.8 : 0) + quoteLines.length * 3.4;
+        ensureSpace(4.5 + bodyLines.length * 3.6 + extra + 2);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(...INK);
+        doc.text(msg.authorName, M + 4, y, { baseline: 'top' });
+        const nameW = doc.getTextWidth(msg.authorName);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...MUTED);
+        doc.text(`  ·  ${fmtTime(msg.createdAt)}`, M + 4 + nameW, y, { baseline: 'top' });
+        y += 4.2;
+
+        if (quoteLines.length > 0) {
+          doc.setFontSize(7.5);
+          doc.setTextColor(...MUTED);
+          doc.text(quoteLines, M + 8, y, { baseline: 'top' });
+          y += quoteLines.length * 3.4;
+        }
+
+        doc.setFontSize(8.5);
+        doc.setTextColor(...BODY);
+        doc.text(bodyLines, M + 4, y, { baseline: 'top' });
+        y += bodyLines.length * 3.6;
+
+        if (msg.imageUrl) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7.5);
+          doc.setTextColor(...MUTED);
+          doc.text('[photo attached]', M + 4, y, { baseline: 'top' });
+          doc.setFont('helvetica', 'normal');
+          y += 3.8;
+        }
+        y += 2;
+      }
+      y += 5;
+    }
   }
 
   // ---- footer on every page -----------------------------------------------------
