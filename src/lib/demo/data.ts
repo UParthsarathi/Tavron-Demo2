@@ -266,6 +266,64 @@ export const milestones: MilestoneRow[] = [
   { id: 'm-w2', projectId: 'p-mep', title: 'Fire alarm commissioning', dueDate: dateOnly(-65), status: 'COMPLETED' },
 ];
 
+// Real projects carry 35–40 milestones. The hand-written ones above tell the
+// story (the overdue rotor NDT, today's FAT, ...); the generator below fills
+// each active project out to realistic scale with activity × area items.
+// Generated past items are always COMPLETED so the at-risk picture stays
+// exactly the curated one; future items are PENDING.
+function expandMilestones() {
+  const plans: {
+    projectId: string;
+    startDaysAgo: number;
+    horizonDays: number;
+    add: number;
+    acts: string[];
+    zones: string[];
+  }[] = [
+    {
+      projectId: 'p-turbine', startDaysAgo: 42, horizonDays: 30, add: 32,
+      acts: ['Scaffolding & insulation', 'Casing NDT', 'Blade clearance survey', 'Diaphragm inspection', 'Gland seal overhaul', 'Valve refurbishment', 'Oil flushing', 'Loop checks'],
+      zones: ['HP section', 'IP section', 'LP section', 'Front pedestal'],
+    },
+    {
+      projectId: 'p-kochi', startDaysAgo: 85, horizonDays: 60, add: 35,
+      acts: ['Excavation & PCC', 'Rebar & shuttering', 'Concrete pour', 'Steel erection', 'Grouting', 'Piping fit-up', 'Cable laying', 'Painting & fireproofing', 'Punch-list closure'],
+      zones: ['Block A', 'Block B', 'Block C', 'Pipe rack'],
+    },
+    {
+      projectId: 'p-substation', startDaysAgo: 22, horizonDays: 25, add: 32,
+      acts: ['Panel installation', 'Cable termination', 'Loop testing', 'Relay settings', 'Earthing checks', 'HV testing', 'SCADA integration', 'Documentation'],
+      zones: ['Feeder 1', 'Feeder 2', 'Bus section', 'Control room'],
+    },
+    {
+      projectId: 'p-pipeline', startDaysAgo: 28, horizonDays: 55, add: 31,
+      acts: ['Access & scaffolding', 'Surface preparation', 'UT survey', 'Radiography', 'CP measurements', 'Defect assessment', 'Repair recommendation', 'Report sign-off'],
+      zones: ['Section A', 'Section B', 'Section C', 'River crossing'],
+    },
+    {
+      projectId: 'p-etp', startDaysAgo: 12, horizonDays: 75, add: 34,
+      acts: ['Design review', 'HAZOP actions', 'Equipment RFQ', 'Vendor evaluation', 'Civil drawings', 'Structural design', 'Instrumentation index', 'Tender package', 'Approval cycle'],
+      zones: ['Clarifier', 'Aeration basin', 'Sludge handling', 'Outfall'],
+    },
+  ];
+
+  for (const plan of plans) {
+    const names = plan.acts.flatMap((a) => plan.zones.map((z) => `${a} — ${z}`)).slice(0, plan.add);
+    const span = plan.startDaysAgo + plan.horizonDays;
+    names.forEach((title, i) => {
+      const offset = Math.round(-plan.startDaysAgo + (i / (names.length - 1)) * span);
+      milestones.push({
+        id: `m-gen-${plan.projectId}-${i}`,
+        projectId: plan.projectId,
+        title,
+        dueDate: dateOnly(offset),
+        status: offset < 0 ? 'COMPLETED' : 'PENDING',
+      });
+    });
+  }
+}
+expandMilestones();
+
 export const tasks: TaskRow[] = [
   // Turbine
   { id: 't-t1', projectId: 'p-turbine', title: 'Dye-penetrant test on rotor blades', status: 'IN_PROGRESS', engineerId: 'e-ananya', createdAt: daysAgoIso(6) },
