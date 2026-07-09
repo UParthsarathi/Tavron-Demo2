@@ -395,6 +395,21 @@ const LOG_POOL: { engineerId: string; projectId: string | null; lines: string[] 
   ]},
 ];
 
+/** Self-contained "site photo" placeholder (SVG data URI — no network). */
+function sitePhoto(label: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#374151"/><stop offset="1" stop-color="#111827"/>
+    </linearGradient></defs>
+    <rect width="640" height="360" fill="url(#g)"/>
+    <circle cx="320" cy="150" r="34" fill="none" stroke="#9ca3af" stroke-width="4"/>
+    <circle cx="320" cy="150" r="14" fill="#9ca3af"/>
+    <rect x="286" y="106" width="24" height="14" rx="3" fill="#9ca3af"/>
+    <text x="320" y="240" text-anchor="middle" font-family="monospace" font-size="18" fill="#e5e7eb">${label}</text>
+  </svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function buildLogs(): DailyLog[] {
   const rows: DailyLog[] = [];
   const projectName = (pid: string | null) =>
@@ -422,10 +437,52 @@ function buildLogs(): DailyLog[] {
       });
     });
   }
+  // A few entries carry geotagged site photos — the field-evidence story.
+  // Attach to each engineer's most recent entry so the photos always show
+  // near the top of the feed regardless of the generator's skip pattern.
+  const attachPhoto = (engineerId: string, label: string) => {
+    const row = rows
+      .filter((r) => r.authorId === engineerId)
+      .sort((a, b) => b.logDate.localeCompare(a.logDate))[0];
+    if (row) row.imageUrl = sitePhoto(label);
+  };
+  attachPhoto('e-ananya', 'Site photo — rotor stage 3');
+  attachPhoto('e-priya', 'Site photo — Block C rebar');
+  attachPhoto('e-ishita', 'Site photo — Bay 4 panel');
+
   return rows;
 }
 
 export const logs: DailyLog[] = buildLogs();
+
+// ---------------------------------------------------------------------------
+// Daily-log verification: a manager signs off one engineer's whole day.
+// Keyed `${authorId}|${logDate}`. Editing that day clears the sign-off.
+// ---------------------------------------------------------------------------
+
+export const logVerifications: Record<string, { byId: string; byName: string; at: string }> = {};
+
+export const verificationKey = (authorId: string, logDate: string) => `${authorId}|${logDate}`;
+
+function seedVerifications() {
+  const yesterday = dateOnly(-1);
+  const today = dateOnly(0);
+  const engineerDays = [...new Set(logs.map((l) => verificationKey(l.authorId, l.logDate)))];
+  let i = 0;
+  for (const key of engineerDays) {
+    const logDate = key.split('|')[1];
+    if (logDate === today) continue; // today: pending review
+    // Yesterday: roughly half reviewed, so the demo shows both states.
+    if (logDate === yesterday && i++ % 2 === 0) continue;
+    const manager = i % 3 === 0 ? profiles[1] : profiles[0]; // Meera or Vikram
+    logVerifications[key] = {
+      byId: manager.id,
+      byName: manager.name,
+      at: `${logDate}T18:30:00.000Z`,
+    };
+  }
+}
+seedVerifications();
 
 // ---------------------------------------------------------------------------
 // Messaging: DM conversations, messages, read state

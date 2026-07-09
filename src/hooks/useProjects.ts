@@ -185,7 +185,7 @@ export function useProjects() {
 
   // ---- daily logs ----------------------------------------------------------
   const addDailyLog = useCallback(
-    (data: { content: string; projectId?: string | null }) =>
+    (data: { content: string; projectId?: string | null; imageFile?: File | null }) =>
       run('Saved log', () => {
         if (!profile) return Promise.reject(new Error('Not signed in'));
         return dailyLogsApi.createDailyLog({ authorId: profile.id, ...data });
@@ -196,6 +196,15 @@ export function useProjects() {
 
   const deleteDailyLog = useCallback((logId: string) =>
     run('Deleted log', () => dailyLogsApi.deleteDailyLog(logId)), [run]);
+
+  const verifyLogDay = useCallback((authorId: string, logDate: string) =>
+    run('Verified day', () => {
+      if (!profile) return Promise.reject(new Error('Not signed in'));
+      return dailyLogsApi.verifyLogDay({ authorId, logDate, managerId: profile.id });
+    }), [run, profile]);
+
+  const unverifyLogDay = useCallback((authorId: string, logDate: string) =>
+    run('Verification removed', () => dailyLogsApi.unverifyLogDay(authorId, logDate)), [run]);
 
   return {
     projects,
@@ -221,5 +230,7 @@ export function useProjects() {
     addDailyLog,
     updateDailyLog,
     deleteDailyLog,
+    verifyLogDay,
+    unverifyLogDay,
   };
 }

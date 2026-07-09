@@ -350,14 +350,39 @@ export const documents = {
 // dailyLogs
 // ---------------------------------------------------------------------------
 
+/** Any change to an engineer-day (add/edit/delete) voids its sign-off. */
+function clearVerification(authorId: string, logDate: string): void {
+  delete db.logVerifications[db.verificationKey(authorId, logDate)];
+}
+
 export const dailyLogs = {
   async fetchDailyLogs(): Promise<DailyLog[]> {
     await db.sleep();
     const me = db.getCurrentDemoUser();
     return db.logs
       .filter((l) => db.viewerIsManager() || l.authorId === me?.id)
-      .slice()
+      .map((l) => {
+        const v = db.logVerifications[db.verificationKey(l.authorId, l.logDate)];
+        return { ...l, verifiedByName: v?.byName ?? null, verifiedAt: v?.at ?? null };
+      })
       .sort((a, b) => b.logDate.localeCompare(a.logDate) || b.createdAt.localeCompare(a.createdAt));
+  },
+
+  /** Manager sign-off of one engineer's whole day. */
+  async verifyLogDay(input: { authorId: string; logDate: string; managerId: string }): Promise<void> {
+    await db.sleep();
+    const manager = db.profiles.find((p) => p.id === input.managerId);
+    if (!manager || manager.role !== 'MANAGER') throw err('Only managers can verify logs');
+    db.logVerifications[db.verificationKey(input.authorId, input.logDate)] = {
+      byId: manager.id,
+      byName: manager.name,
+      at: new Date().toISOString(),
+    };
+  },
+
+  async unverifyLogDay(authorId: string, logDate: string): Promise<void> {
+    await db.sleep();
+    clearVerification(authorId, logDate);
   },
 
   async createDailyLog(input: {
@@ -365,21 +390,25 @@ export const dailyLogs = {
     content: string;
     logDate?: string;
     projectId?: string | null;
+    imageFile?: File | null;
   }): Promise<void> {
     await db.sleep();
     const author = db.profiles.find((p) => p.id === input.authorId);
     const project = input.projectId ? db.projects.find((p) => p.id === input.projectId) : null;
+    const logDate = input.logDate ?? db.dateOnly(0);
     db.logs.push({
       id: db.newId('log'),
       authorId: input.authorId,
       authorName: author?.name ?? 'Unknown',
-      logDate: input.logDate ?? db.dateOnly(0),
+      logDate,
       content: input.content,
       projectId: input.projectId ?? null,
       projectName: project?.name ?? null,
       taskId: null,
       createdAt: new Date().toISOString(),
+      imageUrl: input.imageFile ? URL.createObjectURL(input.imageFile) : null,
     });
+    clearVerification(input.authorId, logDate); // new content → day needs re-review
   },
 
   async updateDailyLog(logId: string, content: string): Promise<void> {
@@ -387,11 +416,14 @@ export const dailyLogs = {
     const l = db.logs.find((x) => x.id === logId);
     if (!l) throw err('Log not found');
     l.content = content;
+    clearVerification(l.authorId, l.logDate);
   },
 
   async deleteDailyLog(logId: string): Promise<void> {
     await db.sleep();
+    const l = db.logs.find((x) => x.id === logId);
     remove(db.logs, (x) => x.id === logId);
+    if (l) clearVerification(l.authorId, l.logDate);
   },
 };
 

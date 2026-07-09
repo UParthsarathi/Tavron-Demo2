@@ -43,6 +43,8 @@ export function ManagerLayout() {
     addDailyLog,
     updateDailyLog,
     deleteDailyLog,
+    verifyLogDay,
+    unverifyLogDay,
   } = useProjects();
 
   const chat = useConversations();
@@ -113,6 +115,9 @@ export function ManagerLayout() {
             onAddLog={addDailyLog}
             onUpdateLog={updateDailyLog}
             onDeleteLog={deleteDailyLog}
+            engineers={engineers}
+            onVerifyDay={verifyLogDay}
+            onUnverifyDay={unverifyLogDay}
           />
         ) : currentView === 'actions' ? (
           <QuickActionsView onActionClick={(action) => {
@@ -131,10 +136,12 @@ export function ManagerLayout() {
               projects={projects}
               engineers={engineers}
               standaloneTasks={standaloneTasks}
+              logs={logs}
               onOpenProject={(projectId) => {
                 setCurrentView('projects');
                 setSelectedProjectId(projectId);
               }}
+              onOpenLogs={() => setCurrentView('logs')}
             />
           </div>
         ) : selectedProject ? (
