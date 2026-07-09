@@ -64,6 +64,18 @@ export function ProjectDetails({
   const [completeMilestoneId, setCompleteMilestoneId] = useState<string | null>(null);
   const [completeMilestoneImage, setCompleteMilestoneImage] = useState<File | null>(null);
 
+  // Real projects carry 35–40 milestones; the timeline collapses the
+  // completed ones by default once there are enough to bury the open work.
+  const [showCompleted, setShowCompleted] = useState<boolean | null>(null);
+  const sortedMilestones = [...project.milestones].sort(
+    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  );
+  const completedCount = sortedMilestones.filter((m) => m.status === 'COMPLETED').length;
+  const revealCompleted = showCompleted ?? completedCount <= 5;
+  const timelineMilestones = revealCompleted
+    ? sortedMilestones
+    : sortedMilestones.filter((m) => m.status !== 'COMPLETED');
+
   // Milestone Form
   const [mTitle, setMTitle] = useState('');
   const [mDate, setMDate] = useState('');
@@ -408,12 +420,31 @@ export function ProjectDetails({
                 <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">Create milestones to track important project phases, deadlines, and deliverables.</p>
               </div>
             ) : (
+              <>
+                {completedCount > 0 && (
+                  <button
+                    onClick={() => setShowCompleted(!revealCompleted)}
+                    className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 py-2 rounded-lg transition-colors"
+                  >
+                    <CircleCheck className="w-3.5 h-3.5 text-brand-green-text" />
+                    {revealCompleted
+                      ? `Hide ${completedCount} completed`
+                      : `Show ${completedCount} completed milestones`}
+                  </button>
+                )}
+                {timelineMilestones.length === 0 ? (
+                  <div className="bg-gray-50 dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      All {completedCount} milestones completed. 🎉
+                    </p>
+                  </div>
+                ) : (
               <div className="relative pl-3 md:pl-0 py-4">
                 {/* Vertical Timeline Line (desktop centered, mobile left) */}
                 <div className="absolute left-[27px] md:left-1/2 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-800 transform md:-translate-x-1/2" />
 
                 <div className="space-y-8 relative">
-                  {[...project.milestones].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).map((m, idx) => {
+                  {timelineMilestones.map((m, idx) => {
                     const isEven = idx % 2 === 0;
                     // Check if it's past due (only comparing date parts to avoid time timezone bugs)
                     const dueDate = new Date(m.dueDate);
@@ -507,6 +538,8 @@ export function ProjectDetails({
                   })}
                 </div>
               </div>
+                )}
+              </>
             )}
           </div>
         )}
