@@ -10,6 +10,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Where invite-email links land. Must be allow-listed in the dashboard under
+// Auth → URL Configuration (Site URL or Redirect URLs), or Supabase falls
+// back to the Site URL.
+const APP_URL = "https://tavron-demo2.vercel.app/";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -71,6 +76,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: APP_URL,
     data: {
       name: body.name?.trim() || email.split("@")[0],
       discipline,

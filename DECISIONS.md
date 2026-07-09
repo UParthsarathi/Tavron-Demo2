@@ -144,5 +144,5 @@ One line per decision. Update lines in place; don't duplicate.
 - Disable email self-signup: Dashboard → Auth → Sign In / Up → Email.
 - Enable leaked password protection: Dashboard → Auth → Passwords.
 - Delete empty legacy buckets `chat-images` and `project-docs`: Dashboard → Storage (SQL deletion is blocked by storage.protect_delete).
-- Set Auth Site URL (Dashboard → Auth → URL Configuration) to the deployed app URL so invite-email links land on the app, not localhost.
+- Set Auth Site URL (Dashboard → Auth → URL Configuration) to `https://tavron-demo2.vercel.app/` so invite-email links land on the app, not localhost. Partially mitigated 2026-07-09: invite-engineer v2 passes an explicit `redirectTo` to that URL — but redirectTo is only honored once the URL is allow-listed there, so this dashboard step is still required.
 - Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in deployment env (local `.env` already written).
