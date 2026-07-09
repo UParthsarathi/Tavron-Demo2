@@ -1,33 +1,27 @@
 import React from 'react';
-import { Project, Engineer } from '@/types';
+import { Engineer, EngineerTask, Project } from '@/types';
 import { motion } from 'framer-motion';
-import { Users } from 'lucide-react';
+import { ArrowRight, Users } from 'lucide-react';
+import { computeEngineerLoads } from './WorkloadScreen';
+
+const PREVIEW_COUNT = 6;
 
 interface WorkloadWidgetProps {
   projects: Project[];
+  engineers: Engineer[];
+  standaloneTasks: EngineerTask[];
+  onViewAll: () => void;
 }
 
-export function WorkloadWidget({ projects }: WorkloadWidgetProps) {
-  const engineerLoad = new Map<string, { engineer: Engineer, activeProjects: number, tasks: number }>();
-
-  projects.forEach(p => {
-    if (p.status !== 'ACTIVE') return;
-    
-    p.engineers.forEach(e => {
-      if (!engineerLoad.has(e.id)) {
-        engineerLoad.set(e.id, { engineer: e, activeProjects: 0, tasks: 0 });
-      }
-      engineerLoad.get(e.id)!.activeProjects += 1;
-    });
-
-    p.tasks.forEach(t => {
-      if (t.status !== 'DONE' && engineerLoad.has(t.engineerId)) {
-        engineerLoad.get(t.engineerId)!.tasks += 1;
-      }
-    });
-  });
-
-  const loadList = Array.from(engineerLoad.values()).sort((a, b) => b.tasks - a.tasks);
+/**
+ * Compact preview of the busiest engineers. Counts standalone ("Delegate
+ * Work") tasks too, and the full screen behind View All includes idle
+ * engineers — the two blind spots of the original widget.
+ */
+export function WorkloadWidget({ projects, engineers, standaloneTasks, onViewAll }: WorkloadWidgetProps) {
+  const loads = computeEngineerLoads(projects, engineers, standaloneTasks);
+  const preview = loads.slice(0, PREVIEW_COUNT);
+  const availableCount = loads.filter((l) => l.projectTasks + l.standaloneTasks === 0).length;
 
   return (
     <motion.div
@@ -41,14 +35,14 @@ export function WorkloadWidget({ projects }: WorkloadWidgetProps) {
         </div>
         <h3 className="font-semibold text-gray-900 dark:text-white">Workload Distribution</h3>
       </div>
-      
-      {loadList.length === 0 ? (
+
+      {loads.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
-          <p className="text-sm text-gray-500">No active engineers.</p>
+          <p className="text-sm text-gray-500">No engineers yet.</p>
         </div>
       ) : (
-        <div className="space-y-4 flex-1 overflow-y-auto pr-2">
-          {loadList.map(({ engineer, activeProjects, tasks }) => (
+        <div className="space-y-4 flex-1">
+          {preview.map(({ engineer, projectNames, projectTasks, standaloneTasks: delegated }) => (
             <div key={engineer.id} className="flex justify-between items-center">
               <div className="flex items-center gap-3">
                 {engineer.avatar ? (
@@ -64,13 +58,25 @@ export function WorkloadWidget({ projects }: WorkloadWidgetProps) {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{tasks} <span className="text-xs text-gray-500 font-normal">tasks</span></p>
-                <p className="text-xs text-gray-500">{activeProjects} projects</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {projectTasks + delegated} <span className="text-xs text-gray-500 font-normal">tasks</span>
+                </p>
+                <p className="text-xs text-gray-500">{projectNames.length} projects</p>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <button
+        onClick={onViewAll}
+        className="mt-5 flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors group"
+      >
+        <span>
+          All {loads.length} engineers{availableCount > 0 ? ` · ${availableCount} available` : ''}
+        </span>
+        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+      </button>
     </motion.div>
   );
 }

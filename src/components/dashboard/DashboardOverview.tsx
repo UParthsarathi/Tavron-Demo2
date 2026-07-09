@@ -1,29 +1,56 @@
-import React from 'react';
-import { Project } from '@/types';
+import React, { useState } from 'react';
+import { Engineer, EngineerTask, Project } from '@/types';
 import { motion } from 'framer-motion';
 import { BarChart3, CheckCircle2, Users } from 'lucide-react';
 import { DelayedProjectsWidget } from './DelayedProjectsWidget';
 import { UpcomingMilestonesWidget } from './UpcomingMilestonesWidget';
 import { WorkloadWidget } from './WorkloadWidget';
+import { WorkloadScreen } from './WorkloadScreen';
+import { AtRiskScreen } from './AtRiskScreen';
+import { MilestonesScreen } from './MilestonesScreen';
+
+type DashboardScreen = 'overview' | 'workload' | 'atrisk' | 'milestones';
 
 interface DashboardOverviewProps {
   projects: Project[];
+  engineers: Engineer[];
+  standaloneTasks: EngineerTask[];
+  onOpenProject: (projectId: string) => void;
 }
 
-export function DashboardOverview({ projects }: DashboardOverviewProps) {
-  const activeProjects = projects.filter(p => p.status === 'ACTIVE').length;
-  const completedProjects = projects.filter(p => p.status === 'COMPLETED').length;
-  
-  const uniqueEngineers = new Set<string>();
+/**
+ * The dashboard: an overview of stat tiles + three widgets, each widget
+ * opening a full detail screen (workload, at-risk, milestone timeline).
+ * Screen state lives here so the header's Dashboard tab stays active.
+ */
+export function DashboardOverview({ projects, engineers, standaloneTasks, onOpenProject }: DashboardOverviewProps) {
+  const [screen, setScreen] = useState<DashboardScreen>('overview');
+  const back = () => setScreen('overview');
 
-  projects.forEach(p => {
-    p.engineers.forEach(e => uniqueEngineers.add(e.id));
-  });
+  if (screen === 'workload') {
+    return (
+      <WorkloadScreen projects={projects} engineers={engineers} standaloneTasks={standaloneTasks} onBack={back} />
+    );
+  }
+  if (screen === 'atrisk') {
+    return <AtRiskScreen projects={projects} onOpenProject={onOpenProject} onBack={back} />;
+  }
+  if (screen === 'milestones') {
+    return <MilestonesScreen projects={projects} onOpenProject={onOpenProject} onBack={back} />;
+  }
+
+  const activeProjects = projects.filter(p => p.status === 'ACTIVE');
+  const completedProjects = projects.filter(p => p.status === 'COMPLETED').length;
+
+  // Engineers staffed on an active project right now — completed projects
+  // don't keep anyone "active" forever.
+  const staffed = new Set<string>();
+  activeProjects.forEach(p => p.engineers.forEach(e => staffed.add(e.id)));
 
   const stats = [
     {
       label: 'Active Projects',
-      value: activeProjects.toString(),
+      value: activeProjects.length.toString(),
       icon: <BarChart3 className="w-4 h-4 text-gray-900 dark:text-gray-100" />,
       subtext: `${projects.length} total projects`,
       color: 'bg-gray-100 dark:bg-gray-800',
@@ -36,10 +63,10 @@ export function DashboardOverview({ projects }: DashboardOverviewProps) {
       color: 'bg-gray-100 dark:bg-gray-800',
     },
     {
-      label: 'Active Engineers',
-      value: uniqueEngineers.size.toString(),
+      label: 'Engineers on Projects',
+      value: `${staffed.size}/${engineers.length}`,
       icon: <Users className="w-4 h-4 text-gray-900 dark:text-gray-100" />,
-      subtext: 'Across all projects',
+      subtext: 'Staffed on active projects',
       color: 'bg-gray-100 dark:bg-gray-800',
     }
   ];
@@ -72,10 +99,15 @@ export function DashboardOverview({ projects }: DashboardOverviewProps) {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
-        <DelayedProjectsWidget projects={projects} />
-        <UpcomingMilestonesWidget projects={projects} />
-        <WorkloadWidget projects={projects} />
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6 items-start">
+        <DelayedProjectsWidget projects={projects} onViewAll={() => setScreen('atrisk')} />
+        <UpcomingMilestonesWidget projects={projects} onViewAll={() => setScreen('milestones')} />
+        <WorkloadWidget
+          projects={projects}
+          engineers={engineers}
+          standaloneTasks={standaloneTasks}
+          onViewAll={() => setScreen('workload')}
+        />
       </section>
     </div>
   );

@@ -127,7 +127,15 @@ export function ManagerLayout() {
           }} />
         ) : currentView === 'dashboard' ? (
           <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-8">
-            <DashboardOverview projects={projects} />
+            <DashboardOverview
+              projects={projects}
+              engineers={engineers}
+              standaloneTasks={standaloneTasks}
+              onOpenProject={(projectId) => {
+                setCurrentView('projects');
+                setSelectedProjectId(projectId);
+              }}
+            />
           </div>
         ) : selectedProject ? (
           <ProjectDetails

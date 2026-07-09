@@ -32,3 +32,22 @@ export function formatTimeAgo(dateString: string): string {
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
 }
+
+/**
+ * Whole days between today and an ISO date (date-only or full timestamp),
+ * compared calendar-day to calendar-day in local time: 0 = due today,
+ * positive = days away, negative = days past. Keeps "due today" from
+ * counting as overdue the moment the clock passes midnight.
+ */
+export function daysFromToday(isoDate: string): number {
+  const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
+  const due = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - today.getTime()) / 86400000);
+}
+
+/** Strictly before today — a due date stops being "upcoming" the day after. */
+export function isOverdue(isoDate: string): boolean {
+  return daysFromToday(isoDate) < 0;
+}
