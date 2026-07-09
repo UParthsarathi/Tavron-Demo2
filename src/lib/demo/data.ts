@@ -453,17 +453,36 @@ const LOG_POOL: { engineerId: string; projectId: string | null; lines: string[] 
   ]},
 ];
 
-/** Self-contained "site photo" placeholder (SVG data URI — no network). */
-function sitePhoto(label: string): string {
+/**
+ * Self-contained "site photo" placeholder (SVG data URI — no network).
+ * Three scene variants so a feed full of photos doesn't look copy-pasted.
+ */
+function sitePhoto(label: string, variant = 0): string {
+  const scenes = [
+    // camera glyph
+    `<circle cx="320" cy="150" r="34" fill="none" stroke="#9ca3af" stroke-width="4"/>
+     <circle cx="320" cy="150" r="14" fill="#9ca3af"/>
+     <rect x="286" y="106" width="24" height="14" rx="3" fill="#9ca3af"/>`,
+    // pipe rack
+    `<g stroke="#9ca3af" stroke-width="5" fill="none">
+       <line x1="120" y1="115" x2="520" y2="115"/><line x1="120" y1="142" x2="520" y2="142"/>
+       <line x1="120" y1="169" x2="520" y2="169"/><line x1="175" y1="90" x2="175" y2="195"/>
+       <line x1="320" y1="90" x2="320" y2="195"/><line x1="465" y1="90" x2="465" y2="195"/>
+     </g>`,
+    // crane
+    `<g stroke="#9ca3af" stroke-width="5" fill="none">
+       <line x1="205" y1="205" x2="205" y2="80"/><line x1="205" y1="80" x2="430" y2="95"/>
+       <line x1="205" y1="122" x2="305" y2="88"/><line x1="430" y1="95" x2="430" y2="148"/>
+       <rect x="414" y="148" width="32" height="24"/>
+     </g>`,
+  ];
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">
     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#374151"/><stop offset="1" stop-color="#111827"/>
     </linearGradient></defs>
     <rect width="640" height="360" fill="url(#g)"/>
-    <circle cx="320" cy="150" r="34" fill="none" stroke="#9ca3af" stroke-width="4"/>
-    <circle cx="320" cy="150" r="14" fill="#9ca3af"/>
-    <rect x="286" y="106" width="24" height="14" rx="3" fill="#9ca3af"/>
-    <text x="320" y="240" text-anchor="middle" font-family="monospace" font-size="18" fill="#e5e7eb">${label}</text>
+    ${scenes[variant % scenes.length]}
+    <text x="320" y="250" text-anchor="middle" font-family="monospace" font-size="18" fill="#e5e7eb">${label}</text>
   </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -498,15 +517,27 @@ function buildLogs(): DailyLog[] {
   // A few entries carry geotagged site photos — the field-evidence story.
   // Attach to each engineer's most recent entry so the photos always show
   // near the top of the feed regardless of the generator's skip pattern.
-  const attachPhoto = (engineerId: string, label: string) => {
-    const row = rows
-      .filter((r) => r.authorId === engineerId)
-      .sort((a, b) => b.logDate.localeCompare(a.logDate))[0];
-    if (row) row.imageUrl = sitePhoto(label);
-  };
-  attachPhoto('e-ananya', 'Site photo — rotor stage 3');
-  attachPhoto('e-priya', 'Site photo — Block C rebar');
-  attachPhoto('e-ishita', 'Site photo — Bay 4 panel');
+  const photoSeeds: { engineerId: string; label: string; nth?: number }[] = [
+    { engineerId: 'e-ananya', label: 'Site photo — rotor stage 3' },
+    { engineerId: 'e-priya', label: 'Site photo — Block C rebar' },
+    { engineerId: 'e-ishita', label: 'Site photo — Bay 4 panel' },
+    { engineerId: 'e-vivek', label: 'Site photo — lifting fixture' },
+    { engineerId: 'e-arjun', label: 'Site photo — Section A grid' },
+    { engineerId: 'e-sneha', label: 'Site photo — SCADA bench' },
+    { engineerId: 'e-nikhil', label: 'Site photo — Block D benchmark' },
+    { engineerId: 'e-farhan', label: 'Site photo — toolbox talk' },
+    { engineerId: 'e-suresh', label: 'Site photo — bearing housing' },
+    { engineerId: 'e-neha', label: 'Site photo — CW line supports' },
+    { engineerId: 'e-ananya', label: 'Site photo — clearance readings', nth: 1 },
+    { engineerId: 'e-priya', label: 'Site photo — pour preparation', nth: 1 },
+  ];
+  photoSeeds.forEach((seed, i) => {
+    const own = rows
+      .filter((r) => r.authorId === seed.engineerId)
+      .sort((a, b) => b.logDate.localeCompare(a.logDate));
+    const row = own[seed.nth ?? 0];
+    if (row) row.imageUrl = sitePhoto(seed.label, i);
+  });
 
   return rows;
 }
@@ -633,6 +664,94 @@ export const messages: MessageRow[] = [
   msg('msg-d3a', 'conv-dm-3', 'e-ananya', 'Rohan, does the substation outage clash with our trial run window?', daysAgoIso(1, 15)),
   msg('msg-d3b', 'conv-dm-3', 'e-rohan', 'No — outage is Bay 4 only, your feeders stay live. Checked with operations.', hoursAgoIso(2)),
 ];
+
+// Bulk chatter so project reports and channels read like a real org.
+// Entries are [daysAgo, hour, authorId, text]; everything is at least a day
+// old so the seeded unread badges (set in seedReads below) stay untouched.
+function expandChat() {
+  const chatter: { convId: string; entries: [number, number, string, string][] }[] = [
+    { convId: convForProject('p-turbine'), entries: [
+      [9, 9, 'm-vikram', 'Kickoff recap posted — shutdown scope is frozen, no additions without my sign-off.'],
+      [8, 11, 'e-suresh', 'Rotor lifted clean this morning. Transport cradle worked exactly as planned.'],
+      [8, 15, 'e-lakshmi', 'Receiving inspection on the gasket kits done — all conforming, GRN raised.'],
+      [7, 10, 'e-vivek', 'Fixture drawings sent for review. Need sign-off before Thursday to hold the schedule.'],
+      [7, 14, 'e-karthik', 'OEM says the correction weight table travels with their service rep next week.'],
+      [6, 9, 'e-farhan', 'Permit audit clean. Two reminders issued on harness clips at the condenser deck.'],
+      [5, 12, 'e-ananya', 'Stage 1 blades: no indications. Moving to stage 2 tomorrow morning.'],
+      [4, 16, 'm-meera', 'Client walk-through Friday 10am — keep the laydown area presentable please.'],
+      [3, 10, 'e-suresh', 'Bearing PR raised and sitting in approvals.'],
+      [2, 13, 'e-vivek', 'Fixture welded and load-tested to 125%. Certificates in the project docs.'],
+    ]},
+    { convId: convForProject('p-kochi'), entries: [
+      [9, 8, 'm-meera', 'Weekly cadence reminder: progress photos in the logs by 6pm daily.'],
+      [8, 10, 'e-priya', 'Block B pour cube results in — 28-day strength comfortably above spec.'],
+      [8, 14, 'e-rohan', 'Transformer plinth conduits cast in. As-built markup with the surveyor.'],
+      [7, 9, 'e-arjun', 'Pipe rack spool deliveries resequenced — zone 2 arrives first now.'],
+      [6, 11, 'e-tanvi', 'Two-week lookahead circulated. Steel erection is the critical path.'],
+      [6, 15, 'e-nikhil', 'Dewatering pump on standby for Saturday, forecast shows rain.'],
+      [5, 10, 'e-aditya', 'HT cable drum schedule confirmed with the vendor — no slippage.'],
+      [4, 12, 'e-neha', 'Stress package for the CW line issued for checking.'],
+      [3, 9, 'm-vikram', 'Good recovery on the crane clash, team. Keep Saturday tight.'],
+      [2, 15, 'e-priya', 'Shutter alignment check done for Block C — ready for the pour window.'],
+    ]},
+    { convId: convForProject('p-substation'), entries: [
+      [6, 10, 'e-rohan', 'Outage application submitted to grid control for the changeover window.'],
+      [5, 11, 'e-ishita', 'Vendor FAT procedure reviewed — added two test cases for breaker interlocks.'],
+      [4, 9, 'e-sneha', 'Alarm priority list signed off by operations.'],
+      [3, 14, 'e-aditya', 'Panel labeling drawings released as rev 1.'],
+      [2, 10, 'm-vikram', 'Confirm the outage window by Thursday — grid control needs 72h notice.'],
+    ]},
+    { convId: convForProject('p-pipeline'), entries: [
+      [6, 9, 'e-lakshmi', 'Audit workbook structure agreed with QA — one sheet per section.'],
+      [5, 13, 'e-neha', 'CP historical data request sent to operations.'],
+      [4, 10, 'e-arjun', 'Scaffolding erection starts Wednesday for Section A access.'],
+      [3, 11, 'e-farhan', 'Confined-space rescue plan updated for the river crossing chamber.'],
+    ]},
+    { convId: convForProject('p-etp'), entries: [
+      [5, 10, 'e-divya', 'Lab results for raw effluent uploaded — COD higher than the old design basis.'],
+      [4, 14, 'e-ishita', 'Instrument index skeleton ready; tagging convention follows the plant standard.'],
+      [3, 9, 'e-priya', 'Civil scope split drafted for the tender package.'],
+      [2, 11, 'e-nikhil', 'Site levels taken around the clarifier area — report in docs.'],
+    ]},
+    // Task threads that were quiet get real back-and-forth.
+    { convId: convForTask('t-t2'), entries: [
+      [5, 10, 'e-suresh', 'Three vendors shortlisted. SKF fastest at 3 weeks from PO.'],
+      [5, 11, 'm-vikram', 'Go with the fastest unless the price is silly.'],
+      [4, 9, 'e-suresh', 'PR raised with the SKF quote attached.'],
+    ]},
+    { convId: convForTask('t-t3'), entries: [
+      [7, 9, 'e-vivek', 'Fit-up complete, waiting on WPS sign-off to start welding.'],
+      [6, 15, 'e-karthik', 'Load calc reviewed — good to weld.'],
+    ]},
+    { convId: convForTask('t-k1'), entries: [
+      [3, 10, 'e-priya', 'Checklist rev B uploaded with the cover fixes included.'],
+      [3, 12, 'm-meera', 'Use rev B for Saturday’s pour. Archive rev A.'],
+    ]},
+    { convId: convForTask('t-k5'), entries: [
+      [4, 11, 'e-neha', 'Two supports need relocation near the rack tie-in — markup attached.'],
+      [4, 14, 'e-arjun', 'Isometrics updated to suit. Reissued for checking.'],
+    ]},
+    { convId: convForTask('t-s1'), entries: [
+      [2, 10, 'e-ishita', 'Punch list steady at 6 items, none category A.'],
+      [2, 11, 'e-rohan', 'Try to close at least 3 before the outage window.'],
+    ]},
+    { convId: convForTask('t-e1'), entries: [
+      [3, 9, 'e-divya', 'First pass done; sludge line numbers look high.'],
+      [2, 16, 'e-priya', 'Recheck the recycle stream split before you lock it.'],
+    ]},
+    { convId: convForTask('t-p3'), entries: [
+      [2, 9, 'e-neha', '2023 rectifier logs are patchy — flagged the gaps.'],
+      [1, 10, 'e-lakshmi', 'Note the gaps in the audit register so the client sees them.'],
+    ]},
+  ];
+
+  chatter.forEach((thread, ti) => {
+    thread.entries.forEach(([d, h, authorId, text], mi) => {
+      messages.push(msg(`msg-gen-${ti}-${mi}`, thread.convId, authorId, text, daysAgoIso(d, h)));
+    });
+  });
+}
+expandChat();
 
 /** `${conversationId}|${profileId}` → last-read ISO timestamp. */
 export const reads: Record<string, string> = {};
