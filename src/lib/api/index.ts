@@ -1,14 +1,18 @@
-// The single data-access layer for Tavron. Components and hooks import from
-// here (`@/lib/api`) and never call the Supabase client directly — that's what
-// keeps the backend swap/testing story clean. One module per entity.
+// DEMO BRANCH: the data-access layer is served entirely from the in-memory
+// mock in src/lib/demo — no Supabase, no network, no env vars. Components
+// and hooks import from `@/lib/api` exactly as on main; only this file and
+// the demo folder differ. The real Supabase-backed modules still live next
+// to this file, unreferenced on this branch.
 
-export * as profiles from './profiles';
-export * as projects from './projects';
-export * as milestones from './milestones';
-export * as tasks from './tasks';
-export * as documents from './documents';
-export * as dailyLogs from './dailyLogs';
-export * as storage from './storage';
-export * as realtime from './realtime';
-export * as conversations from './conversations';
-export * as push from './push';
+export {
+  profiles,
+  projects,
+  milestones,
+  tasks,
+  documents,
+  dailyLogs,
+  storage,
+  realtime,
+  conversations,
+  push,
+} from '../demo/api';

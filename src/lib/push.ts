@@ -21,7 +21,9 @@ export function registerServiceWorker(): void {
 
 /** True when this browser can subscribe to push right now. */
 export function isPushSupported(): boolean {
-  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  // DEMO BRANCH: no backend to deliver pushes — report unsupported so the
+  // banner and the account toggle stay out of the way.
+  return false;
 }
 
 export function isIos(): boolean {
@@ -41,7 +43,8 @@ export function isStandalone(): boolean {
  * users need an "Add to Home Screen" nudge instead of a permission prompt.
  */
 export function iosNeedsInstall(): boolean {
-  return isIos() && !isStandalone() && !isPushSupported();
+  // DEMO BRANCH: never nudge install — see isPushSupported above.
+  return false;
 }
 
 export function notificationPermission(): NotificationPermission | 'unsupported' {

@@ -3,6 +3,12 @@
 Internal project management for one organization: **2 Project Managers + 16 Engineers**.
 React (Vite) frontend on a Supabase backend (Postgres + Auth + Storage + Edge Functions).
 
+> **This is the `demo` branch** — frontend only, no backend, no env vars needed.
+> All data comes from the in-memory mock in `src/lib/demo/` (16 engineers,
+> 2 managers, 5 active projects, chat history, logs). Pick a viewpoint on the
+> entry screen; mutations work in-session and reset on refresh. Everything
+> else below describes the real app on `main`.
+
 ## Quick start
 
 ```bash

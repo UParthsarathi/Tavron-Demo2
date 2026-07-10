@@ -127,4 +127,10 @@ export interface DailyLog {
   projectName: string | null;
   taskId: string | null;
   createdAt: string;
+  /** Site photo / GPS-tagged evidence attached to the entry. */
+  imageUrl?: string | null;
+  // Manager sign-off covers the author's whole day; every log row of that
+  // engineer-day carries the same values. Editing the day clears it.
+  verifiedByName?: string | null;
+  verifiedAt?: string | null;
 }
